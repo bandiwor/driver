@@ -39,6 +39,13 @@ const page = await browser.newPage({ viewport: { width: 1280, height: 720 } })
 page.on('pageerror', (e) => errors.push(e.message))
 page.on('console', (m) => m.type() === 'error' && errors.push(m.text()))
 
+/**
+ * Wait until the HUD speed exceeds `kmh`. Condition-based, not a fixed delay:
+ * with inline physics on a software renderer simulation runs slower than
+ * real time (physics is tied to frames there — the reason the worker exists).
+ */
+const speedAbove = (kmh, timeout = 20_000) =>
+  page.waitForFunction((v) => Number(document.querySelector('.k-hud__speed-value')?.textContent) > v, kmh, { timeout })
 const shot = (name) => page.screenshot({ path: `${a.out}/ui-${name}.png` })
 const step = async (name, fn) => {
   process.stdout.write(`• ${name} … `)
@@ -58,11 +65,11 @@ await step('start driving', async () => {
   await page.getByRole('button', { name: 'Поехали' }).click()
   await page.locator('.k-hud').waitFor()
   await page.keyboard.down('KeyW')
-  await page.waitForTimeout(2500)
+  await speedAbove(15).catch(() => {
+    throw new Error('car did not accelerate past 15 km/h')
+  })
   const rpm = Number(await page.locator('svg[role=meter]').getAttribute('aria-valuenow'))
-  const kmh = Number(await page.locator('.k-hud__speed-value').textContent())
   if (!(rpm > 2000)) throw new Error(`engine did not rev: ${rpm} rpm`)
-  if (!(kmh > 15)) throw new Error(`car did not accelerate: ${kmh} km/h`)
   await page.keyboard.down('KeyD')
   await page.waitForTimeout(600)
   await page.keyboard.up('KeyD')
@@ -247,10 +254,10 @@ await step('garage: switch to another car (pickup) and drive it', async () => {
   await page.locator('.k-hud').waitFor()
   await page.waitForTimeout(500)
   await page.keyboard.down('KeyW')
-  await page.waitForTimeout(2500)
-  const kmh = Number(await page.locator('.k-hud__speed-value').textContent())
+  await speedAbove(10).catch(() => {
+    throw new Error('pickup did not drive past 10 km/h')
+  })
   await page.keyboard.up('KeyW')
-  if (!(kmh > 10)) throw new Error(`pickup did not drive: ${kmh} km/h`)
   await shot('pickup-driving')
 })
 
