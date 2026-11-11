@@ -8,6 +8,7 @@
  */
 import workletUrl from './engine.worklet.ts?worker&url'
 import { renderBlowOff, renderFlutter, renderPop } from './dsp/oneshots.ts'
+import type { EngineVoiceSpec } from './dsp/engineSynth.ts'
 
 export interface EngineSoundInput {
   rpm: number
@@ -30,6 +31,8 @@ export interface AudioService {
   impact(strength: number): void
   suspend(): void
   resume(): void
+  /** Release the audio graph (switching vehicles creates a new service). */
+  dispose(): void
 }
 
 export class NullAudio implements AudioService {
@@ -44,6 +47,7 @@ export class NullAudio implements AudioService {
   impact(): void {}
   suspend(): void {}
   resume(): void {}
+  dispose(): void {}
 }
 
 export class WebAudio implements AudioService {
@@ -61,7 +65,7 @@ export class WebAudio implements AudioService {
   #tyreGain: GainNode | null = null
   #volume = 0.7
 
-  constructor(readonly cylinders: number) {}
+  constructor(readonly voice: EngineVoiceSpec) {}
 
   get ready(): boolean {
     return this.#engine !== null
@@ -78,7 +82,7 @@ export class WebAudio implements AudioService {
     bus.connect(comp).connect(master).connect(ctx.destination)
     const engine = new AudioWorkletNode(ctx, 'kuzov-engine', {
       outputChannelCount: [2],
-      processorOptions: { cylinders: this.cylinders },
+      processorOptions: { voice: this.voice },
     })
     engine.connect(bus)
     this.#engine = engine
@@ -179,6 +183,12 @@ export class WebAudio implements AudioService {
     src.connect(bp).connect(g).connect(bus)
     src.start(t)
     src.stop(t + 0.6)
+  }
+
+  dispose(): void {
+    void this.#ctx?.close()
+    this.#ctx = null
+    this.#engine = null
   }
 
   suspend(): void {

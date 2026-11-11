@@ -67,9 +67,21 @@ export interface DrivetrainDef {
   automatic: boolean
 }
 
+/** Engine voice character for the procedural synth (see audio/dsp/engineSynth.ts). */
+export interface EngineSoundDef {
+  /** Exhaust resonance centre frequencies, Hz (low = deep). */
+  resonances: readonly number[]
+  /** Per-cylinder firing irregularity 0..0.12 (V8 burble ↑). */
+  irregularity: number
+  gain: number
+}
+
 export interface VehicleDef {
   id: string
   name: string
+  /** Short body/drive description for the garage (e.g. "Хэтчбек · передний привод"). */
+  description: string
+  sound: EngineSoundDef
   mass: number // kg target (total, incl. unsprung)
   stations: readonly BodyStation[]
   body: BodyMaterial

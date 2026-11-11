@@ -213,6 +213,23 @@ await step('pause menu', async () => {
   await page.locator('.k-scrim').waitFor({ state: 'detached' })
 })
 
+await step('garage: switch to another car (pickup) and drive it', async () => {
+  await page.keyboard.press('Escape')
+  await page.getByRole('button', { name: 'В меню' }).click()
+  await page.getByRole('radio', { name: /Burlak/ }).click()
+  await page.getByText('Пикап · полный привод · V8').waitFor()
+  await shot('garage')
+  await page.getByRole('button', { name: 'Поехали' }).click()
+  await page.locator('.k-hud').waitFor()
+  await page.waitForTimeout(500)
+  await page.keyboard.down('KeyW')
+  await page.waitForTimeout(2500)
+  const kmh = Number(await page.locator('.k-hud__speed-value').textContent())
+  await page.keyboard.up('KeyW')
+  if (!(kmh > 10)) throw new Error(`pickup did not drive: ${kmh} km/h`)
+  await shot('pickup-driving')
+})
+
 await browser.close()
 await (server.close?.() ?? server.httpServer?.close())
 if (errors.length) {

@@ -23,6 +23,14 @@ export interface EngineVoiceSpec {
   gain: number
 }
 
+/** Voice for a vehicle: cylinder count + its exhaust character. */
+export const voiceFor = (cylinders: number, sound: { resonances: readonly number[]; irregularity: number; gain: number }): EngineVoiceSpec => ({
+  cylinders,
+  resonances: sound.resonances,
+  irregularity: sound.irregularity,
+  gain: sound.gain,
+})
+
 export const defaultVoiceSpec = (cylinders: number): EngineVoiceSpec => ({
   cylinders,
   resonances: [110, 340, 900],

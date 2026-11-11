@@ -20,6 +20,9 @@ export const cameraMode = signal<CameraMode>('chase')
 export const volume = signal(0.7)
 export const showBeams = signal(false)
 
+/** Selected vehicle (garage). */
+export const vehicleId = signal('k1-sedan')
+
 export type Transmission = 'auto' | 'manual'
 /** Chosen in the main menu; mirrored from the vehicle's `gear.auto` param. */
 export const transmission = signal<Transmission>('auto')
@@ -54,6 +57,7 @@ export const paramsVersion = signal(0)
 
 export interface GameBridge {
   game: Game
+  vehicleId: string
   params: ParamStore
   redline: number
   maxRpm: number
@@ -110,6 +114,7 @@ export function bindGame(game: Game, sampleHz = 15): GameBridge {
   }, 1000 / sampleHz)
   return {
     game,
+    vehicleId: v.def.id,
     params: v.params,
     redline: v.engineSpec.redlineRpm,
     maxRpm: Math.ceil((v.engineSpec.limiterRpm + 1000) / 1000) * 1000,

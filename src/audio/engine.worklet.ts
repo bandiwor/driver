@@ -1,7 +1,7 @@
-import { EngineVoice, defaultVoiceSpec } from './dsp/engineSynth.ts'
+import { EngineVoice, defaultVoiceSpec, type EngineVoiceSpec } from './dsp/engineSynth.ts'
 
 export interface EngineWorkletOptions {
-  cylinders: number
+  voice: EngineVoiceSpec
 }
 
 class EngineProcessor extends AudioWorkletProcessor {
@@ -18,7 +18,7 @@ class EngineProcessor extends AudioWorkletProcessor {
   constructor(options?: AudioWorkletNodeOptions) {
     super()
     const o = options?.processorOptions as EngineWorkletOptions | undefined
-    this.#voice = new EngineVoice(sampleRate, defaultVoiceSpec(o?.cylinders ?? 4))
+    this.#voice = new EngineVoice(sampleRate, o?.voice ?? defaultVoiceSpec(4))
   }
 
   process(_in: Float32Array[][], outputs: Float32Array[][], params: Record<string, Float32Array>): boolean {

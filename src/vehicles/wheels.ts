@@ -28,6 +28,15 @@ const AIR_DENSITY = 1.2
 /** Low-speed floors for slip (m/s): keep slips finite and damper-like at rest. */
 const V0_LONG = 1
 const V0_LAT = 3
+/**
+ * Near standstill the tyre force is a damper on the hub node:
+ * c ≈ B·C·μ·Fz / v0. The soft-body solver integrates it explicitly, which is
+ * stable only for c·h/m < 2. The floor v0 is raised per wheel and substep so
+ * c·h/m_hub ≤ 1/STABILITY — robust for any load (landings, bump stops) and
+ * any unsprung mass, without per-car tuning.
+ */
+const STABILITY = 2
+const STRIDE = 13
 /** Slip-ratio step for the numerical tyre slope. */
 const SLOPE_EPS = 0.01
 /** Reference brake bias at which WheelDef.brakeTorque is specified. */
@@ -122,7 +131,7 @@ export class WheelSystem implements SubstepHook {
   readonly #len: Float64Array
   readonly #n: Float64Array // strut unit axis ×3
   readonly #vrel: Float64Array
-  readonly #ax: Float64Array // fw(3) lat(3) N(3) vx camber mu → 12
+  readonly #ax: Float64Array // fw(3) lat(3) N(3) vx camber mu v0Long → STRIDE
   readonly #gs = newGroundSample()
   readonly #ti: TyreInput = { slipRatio: 0, slipAngle: 0, load: 0, nominalLoad: 0, surfaceMu: 1, camber: 0, pressure: 230 }
   readonly #tf = { fx: 0, fy: 0 }
@@ -150,7 +159,7 @@ export class WheelSystem implements SubstepHook {
     this.#len = new Float64Array(n)
     this.#n = new Float64Array(n * 3)
     this.#vrel = new Float64Array(n)
-    this.#ax = new Float64Array(n * 12)
+    this.#ax = new Float64Array(n * STRIDE)
     const pair = (axle: 'front' | 'rear'): [number, number] => {
       const l = def.wheels.findIndex((w) => w.axle === axle && w.x > 0)
       const r = def.wheels.findIndex((w) => w.axle === axle && w.x < 0)
@@ -372,10 +381,13 @@ export class WheelSystem implements SubstepHook {
       // Camber lean = static + body roll (up tilting toward +lateral).
       const camber = setup.camberLean[i]! + (f.ux * ltx + f.uy * lty + f.uz * ltz)
       // Relaxation length: first-order lag of the slip angle.
-      const relax = Math.min(1, (h * Math.max(Math.abs(vx), V0_LAT)) / tyre.relaxationLength)
-      w.slipAngle += (slipAngle(vx, vy, V0_LAT) - w.slipAngle) * relax
       const mu = (gs.friction * setup.grip) / tyre.D
-      const sr = slipRatio(dl.omega, R, vx, V0_LONG)
+      const v0 = (STABILITY * tyre.B * tyre.C * setup.grip * gs.friction * load * h) / def.wheelMass
+      const v0Long = Math.max(V0_LONG, v0)
+      const v0Lat = Math.max(V0_LAT, v0)
+      const relax = Math.min(1, (h * Math.max(Math.abs(vx), v0Lat)) / tyre.relaxationLength)
+      w.slipAngle += (slipAngle(vx, vy, v0Lat) - w.slipAngle) * relax
+      const sr = slipRatio(dl.omega, R, vx, v0Long)
       this.#tyreInput(i, sr, w.slipAngle, load, mu, camber)
       tyreForces2(tyre, ti, tf)
       dl.fx = tf.fx
@@ -388,10 +400,10 @@ export class WheelSystem implements SubstepHook {
         ti.slipRatio = sr - SLOPE_EPS
         const fm = tyreForces2(tyre, ti, tf).fx
         const slope = Math.max(0, (fp - fm) / (2 * SLOPE_EPS))
-        dl.k = (slope * R * R) / Math.max(Math.abs(vx), V0_LONG)
+        dl.k = (slope * R * R) / Math.max(Math.abs(vx), v0Long)
       } else dl.k = 0
       dl.brake = this.#brakeTorque(i)
-      const a = i * 12
+      const a = i * STRIDE
       ax[a] = fwx
       ax[a + 1] = fwy
       ax[a + 2] = fwz
@@ -404,6 +416,7 @@ export class WheelSystem implements SubstepHook {
       ax[a + 9] = vx
       ax[a + 10] = camber
       ax[a + 11] = mu
+      ax[a + 12] = v0Long
     }
 
     // ── 3. driveline (implicit) ────────────────────────────────
@@ -432,8 +445,9 @@ export class WheelSystem implements SubstepHook {
       const dl = this.#dl[i]!
       w.omega = dl.omega
       w.angle = (w.angle + dl.omega * h) % (Math.PI * 2)
-      const a = i * 12
+      const a = i * STRIDE
       const vx = ax[a + 9]!
+      const v0Long = ax[a + 12]!
       if (w.load <= 0) {
         w.fx = 0
         w.fy = 0
@@ -443,7 +457,7 @@ export class WheelSystem implements SubstepHook {
       }
       const vLat = Math.tan(w.slipAngle) * Math.max(Math.abs(vx), V0_LAT)
       w.slipSpeed = Math.hypot(dl.omega * R - vx, vLat)
-      const sr = slipRatio(dl.omega, R, vx, V0_LONG)
+      const sr = slipRatio(dl.omega, R, vx, v0Long)
       this.#tyreInput(i, sr, w.slipAngle, w.load, ax[a + 11]!, ax[a + 10]!)
       tyreForces2(tyre, ti, tf)
       const Fx = tf.fx - tyre.rollingResistance * w.load * Math.tanh(vx * 2)

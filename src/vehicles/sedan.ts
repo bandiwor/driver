@@ -1,61 +1,14 @@
 import { curve } from '../physics/vehicle/curve.ts'
-import type { ParamDef } from '../core/params.ts'
-import type { VehicleDef } from './types.ts'
+import { defineVehicle } from './params.ts'
 
 const deg = Math.PI / 180
 
-const params: ParamDef[] = [
-  // Подвеска
-  { id: 'susp.front.spring', label: 'Пружина перед', group: 'Подвеска', min: 10000, max: 120000, step: 500, default: 42000, unit: 'Н/м' },
-  { id: 'susp.rear.spring', label: 'Пружина зад', group: 'Подвеска', min: 10000, max: 120000, step: 500, default: 38000, unit: 'Н/м' },
-  { id: 'susp.front.bump', label: 'Сжатие перед', group: 'Подвеска', min: 500, max: 10000, step: 100, default: 3000, unit: 'Н·с/м' },
-  { id: 'susp.front.rebound', label: 'Отбой перед', group: 'Подвеска', min: 500, max: 12000, step: 100, default: 4200, unit: 'Н·с/м' },
-  { id: 'susp.rear.bump', label: 'Сжатие зад', group: 'Подвеска', min: 500, max: 10000, step: 100, default: 2800, unit: 'Н·с/м' },
-  { id: 'susp.rear.rebound', label: 'Отбой зад', group: 'Подвеска', min: 500, max: 12000, step: 100, default: 3900, unit: 'Н·с/м' },
-  { id: 'susp.front.arb', label: 'Стабилизатор перед', group: 'Подвеска', min: 0, max: 60000, step: 500, default: 16000, unit: 'Н/м' },
-  { id: 'susp.rear.arb', label: 'Стабилизатор зад', group: 'Подвеска', min: 0, max: 60000, step: 500, default: 9000, unit: 'Н/м' },
-  // Геометрия
-  { id: 'align.front.camber', label: 'Развал перед', group: 'Геометрия', min: -5, max: 2, step: 0.1, default: -1.2, unit: '°' },
-  { id: 'align.rear.camber', label: 'Развал зад', group: 'Геометрия', min: -5, max: 2, step: 0.1, default: -1, unit: '°' },
-  { id: 'align.front.toe', label: 'Схождение перед', group: 'Геометрия', min: -1, max: 1, step: 0.05, default: 0.1, unit: '°', hint: '+ = внутрь' },
-  { id: 'align.rear.toe', label: 'Схождение зад', group: 'Геометрия', min: -1, max: 1, step: 0.05, default: 0.2, unit: '°', hint: '+ = внутрь' },
-  { id: 'steer.lock', label: 'Угол руля', group: 'Геометрия', min: 15, max: 50, step: 1, default: 34, unit: '°' },
-  { id: 'steer.ackermann', label: 'Аккерман', group: 'Геометрия', min: 0, max: 1, step: 0.05, default: 0.8 },
-  // Трансмиссия
-  { id: 'gear.auto', label: 'Автомат', group: 'Трансмиссия', min: 0, max: 1, step: 1, default: 1, kind: 'toggle' },
-  { id: 'gear.final', label: 'Главная пара', group: 'Трансмиссия', min: 2.5, max: 5.5, step: 0.01, default: 3.73 },
-  { id: 'gear.shiftTime', label: 'Время переключения', group: 'Трансмиссия', min: 0.05, max: 0.8, step: 0.01, default: 0.22, unit: 'с' },
-  { id: 'drive.split', label: 'Момент на перед', group: 'Трансмиссия', min: 0, max: 1, step: 0.05, default: 0, hint: '0 задний, 1 передний, между — полный' },
-  { id: 'diff.lock', label: 'Блокировка дифф.', group: 'Трансмиссия', min: 0, max: 1, step: 0.05, default: 0.25, hint: '0 открытый, 1 заблокирован' },
-  // Двигатель
-  { id: 'engine.torqueScale', label: 'Множитель момента', group: 'Двигатель', min: 0.5, max: 2.5, step: 0.05, default: 1 },
-  { id: 'engine.limiter', label: 'Отсечка', group: 'Двигатель', min: 5000, max: 9000, step: 50, default: 7000, unit: 'об/мин' },
-  // Топливо и зажигание (модули fuel / ignition / exhaust)
-  { id: 'fuel.lambda', label: 'Смесь (λ)', group: 'Двигатель', min: 0.65, max: 1.25, step: 0.01, default: 0.88, hint: '< 1 богаче: мощнее до 0.88, дальше дым и отстрелы; > 1 беднее: горячо и слабо' },
-  { id: 'fuel.overrun', label: 'Топливо на сбросе', group: 'Двигатель', min: 0, max: 1, step: 0.05, default: 0.15, hint: 'подача при закрытом газе → хлопки в выхлопе' },
-  { id: 'ignition.timing', label: 'Угол зажигания', group: 'Двигатель', min: -20, max: 10, step: 0.5, default: 0, unit: '°', hint: '− позднее: меньше момента, горячее выхлоп' },
-  { id: 'exhaust.pops', label: 'Чувствительность выхлопа', group: 'Двигатель', min: 0, max: 3, step: 0.1, default: 1, hint: 'насколько легко воспламеняется топливо в трубе' },
-  // Турбина (модуль turbo)
-  { id: 'turbo.enabled', label: 'Турбина', group: 'Турбина', min: 0, max: 1, step: 1, default: 0, kind: 'toggle' },
-  { id: 'turbo.boost', label: 'Давление наддува', group: 'Турбина', min: 0.2, max: 2.5, step: 0.05, default: 0.9, unit: 'бар' },
-  { id: 'turbo.size', label: 'Размер турбины', group: 'Турбина', min: 0.5, max: 2.5, step: 0.05, default: 1, hint: 'больше — выше потенциал наддува и больше яма' },
-  { id: 'turbo.blowOff', label: 'Блоу-офф', group: 'Турбина', min: 0, max: 1, step: 1, default: 1, kind: 'toggle' },
-  { id: 'turbo.antiLag', label: 'Антилаг', group: 'Турбина', min: 0, max: 1, step: 1, default: 0, kind: 'toggle' },
-  // Шины
-  { id: 'tyre.grip', label: 'Сцепление шин', group: 'Шины', min: 0.5, max: 1.6, step: 0.01, default: 1.05, unit: 'μ' },
-  { id: 'tyre.front.pressure', label: 'Давление перед', group: 'Шины', min: 120, max: 350, step: 5, default: 230, unit: 'кПа' },
-  { id: 'tyre.rear.pressure', label: 'Давление зад', group: 'Шины', min: 120, max: 350, step: 5, default: 230, unit: 'кПа' },
-  // Тормоза
-  { id: 'brake.force', label: 'Сила тормозов', group: 'Тормоза', min: 0.3, max: 1.5, step: 0.05, default: 1 },
-  { id: 'brake.bias', label: 'Баланс тормозов', group: 'Тормоза', min: 0.4, max: 0.8, step: 0.01, default: 0.62, hint: 'доля на переднюю ось' },
-  // Кузов
-  { id: 'body.stiffness', label: 'Жёсткость кузова', group: 'Кузов', min: 0.2, max: 3, step: 0.05, default: 1 },
-]
-
 /** "Kuzov K1" — original mid-size RWD sedan used as the reference vehicle. */
-export const sedan: VehicleDef = {
+export const sedan = defineVehicle({
   id: 'k1-sedan',
   name: 'Kuzov K1',
+  description: 'Седан · задний привод · рядная шестёрка',
+  sound: { resonances: [110, 340, 900], irregularity: 0.03, gain: 0.6 },
   mass: 1350,
   color: 0xd94f2b,
   stations: [
@@ -160,5 +113,4 @@ export const sedan: VehicleDef = {
   ackermann: 0.8,
   dragArea: 0.68,
   eye: [0.38, 1.12, -0.1],
-  params,
-}
+})

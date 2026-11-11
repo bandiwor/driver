@@ -1,7 +1,8 @@
 import type { JSX } from 'preact'
 import { Button, Kbd, Panel, Segmented } from '../kit/kit.tsx'
-import { listVehicles } from '../../vehicles/registry.ts'
-import { transmission, type Transmission } from '../store.ts'
+import { getVehicle } from '../../vehicles/registry.ts'
+import { transmission, vehicleId, type Transmission } from '../store.ts'
+import { GarageList, VehicleSheet } from './Garage.tsx'
 
 export const TRANSMISSIONS: readonly { id: Transmission; label: string }[] = [
   { id: 'auto', label: 'Автомат' },
@@ -46,13 +47,14 @@ const TRANSMISSION_HINT: Readonly<Record<Transmission, string>> = {
 export interface MainMenuProps {
   onStart: () => void
   onTransmission: (t: Transmission) => void
+  onVehicle: (id: string) => void
   loading: boolean
 }
 
-export function MainMenu({ onStart, onTransmission, loading }: MainMenuProps): JSX.Element {
-  const car = listVehicles()[0]
+export function MainMenu({ onStart, onTransmission, onVehicle, loading }: MainMenuProps): JSX.Element {
+  const car = getVehicle(vehicleId.value)
   return (
-    <div class="k-menu">
+    <div class="k-menu k-menu--garage">
       <div class="k-menu__brand">
         <svg class="k-logo" viewBox="0 0 64 64" aria-hidden="true">
           <path d="M8 40l8-14h32l8 14v6H8z" fill="none" stroke="currentColor" stroke-width="4" stroke-linejoin="round" />
@@ -66,9 +68,11 @@ export function MainMenu({ onStart, onTransmission, loading }: MainMenuProps): J
         </div>
       </div>
       <div class="k-menu__grid">
-        <Panel title="Заезд" icon="car">
-          <p class="k-menu__car">{car?.name ?? '—'}</p>
-          <p class="k-muted">Свободная площадка · деформируемый кузов</p>
+        <Panel title="Гараж" icon="car">
+          <GarageList selected={car.id} onSelect={onVehicle} />
+        </Panel>
+        <Panel title={car.name} icon="engine">
+          <VehicleSheet def={car} />
           <p class="k-field-label">Коробка передач</p>
           <Segmented label="Коробка передач" options={TRANSMISSIONS} value={transmission.value} onChange={onTransmission} />
           <p class="k-muted k-hint">{TRANSMISSION_HINT[transmission.value]}</p>

@@ -251,3 +251,95 @@
   transform-origin: left center;
   transition: transform 80ms linear;
 }
+
+/* ---------- Garage ---------- */
+.k-menu--garage .k-menu__grid {
+  grid-template-columns: minmax(260px, 340px) minmax(280px, 360px) minmax(260px, 340px);
+  @media (width < 1100px) {
+    grid-template-columns: minmax(260px, 1fr) minmax(280px, 1fr);
+  }
+  @media (--k-narrow) {
+    grid-template-columns: 1fr;
+  }
+}
+.k-menu--garage {
+  overflow-y: auto;
+}
+.k-garage {
+  display: grid;
+  gap: var(--k-s2);
+}
+.k-garage__item {
+  display: grid;
+  grid-template-columns: 92px 1fr;
+  grid-template-rows: auto auto;
+  column-gap: var(--k-s3);
+  align-items: center;
+  padding: var(--k-s2) var(--k-s3);
+  border: 1px solid var(--k-line);
+  border-radius: var(--k-radius);
+  background: var(--k-bg-2);
+  color: var(--k-fg-0);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color var(--k-dur) var(--k-ease),
+    background var(--k-dur) var(--k-ease);
+  & .k-silhouette {
+    grid-row: 1 / 3;
+    width: 92px;
+  }
+  &:hover {
+    background: var(--k-bg-3);
+  }
+  &.is-active {
+    border-color: var(--k-accent);
+    box-shadow: inset 0 0 0 1px var(--k-accent);
+  }
+}
+.k-garage__name {
+  font: 700 var(--k-fs-md) var(--k-font);
+}
+.k-garage__meta {
+  color: var(--k-fg-2);
+  font-size: var(--k-fs-xs);
+  font-variant-numeric: tabular-nums;
+}
+.k-silhouette {
+  display: block;
+  overflow: visible;
+}
+.k-silhouette__wheel {
+  fill: var(--k-bg-0);
+  stroke: var(--k-fg-2);
+  stroke-width: 0.05;
+}
+.k-sheet {
+  display: grid;
+  gap: var(--k-s2);
+  & > .k-silhouette {
+    width: 100%;
+    margin-bottom: var(--k-s1);
+  }
+}
+.k-sheet__specs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--k-s2) var(--k-s3);
+  margin: var(--k-s2) 0 0;
+  & div {
+    display: grid;
+    gap: 2px;
+  }
+  & dt {
+    color: var(--k-fg-2);
+    font-size: var(--k-fs-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+  & dd {
+    margin: 0;
+    font: 600 var(--k-fs-sm) var(--k-mono);
+    font-variant-numeric: tabular-nums;
+  }
+}
