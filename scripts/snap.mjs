@@ -4,6 +4,7 @@
  *   npm run snap                                  # all views of the default car
  *   npm run snap -- --views=iso,top,cockpit --t=2 --beams --w=1600 --h=900
  *   npm run snap -- --vehicle=k1-sedan --kick=0,0,-8,0   # deform, then shoot
+ *   npm run snap -- --drive=throttle:1,steer:0.6 --drive-t=2   # drive a scenario, then shoot
  *   npm run snap -- --url=http://localhost:5173   # use an already running server
  * Output: snapshots/<vehicle>-<view>[-beams].png
  */
@@ -24,6 +25,9 @@ const { values: a } = parseArgs({
     beams: { type: 'boolean', default: false },
     kick: { type: 'string', multiple: true, default: [] },
     after: { type: 'string', default: '1' },
+    drive: { type: 'string' },
+    'drive-t': { type: 'string', default: '2' },
+    tag: { type: 'string', default: '' },
     out: { type: 'string', default: 'snapshots' },
     url: { type: 'string' },
   },
@@ -59,12 +63,16 @@ for (const k of a.kick) {
   await page.evaluate(([n, x, y, z]) => window.__kuzov.kick(n, x, y, z), [node, vx, vy, vz])
 }
 if (a.kick.length) await page.evaluate((s) => window.__kuzov.simulate(s), Number(a.after))
+if (a.drive) {
+  const controls = Object.fromEntries(a.drive.split(',').map((kv) => kv.split(':')).map(([k, v]) => [k, Number(v)]))
+  await page.evaluate(([c, s]) => window.__kuzov.drive(c, s), [controls, Number(a['drive-t'])])
+}
 
 const files = []
 for (const view of a.views.split(',').map((s) => s.trim()).filter(Boolean)) {
   if (!ALL.includes(view)) throw new Error(`Unknown view ${view}`)
   await page.evaluate((v) => window.__kuzov.setView(v), view)
-  const file = resolve(outDir, `${a.vehicle}-${view}${a.beams ? '-beams' : ''}.png`)
+  const file = resolve(outDir, `${a.vehicle}-${view}${a.beams ? '-beams' : ''}${a.tag ? `-${a.tag}` : ''}.png`)
   await page.locator('#viewport').screenshot({ path: file })
   files.push(file)
 }

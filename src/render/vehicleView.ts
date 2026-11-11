@@ -14,6 +14,15 @@ const tmpM = new THREE.Matrix4()
 const tmpL = new THREE.Vector3()
 const tmpU = new THREE.Vector3()
 const tmpF = new THREE.Vector3()
+const tmpQ = new THREE.Quaternion()
+const tmpS = new THREE.Quaternion()
+const AXIS_Y = new THREE.Vector3(0, 1, 0)
+
+/** What the view needs per wheel (WheelState satisfies it). */
+export interface WheelPose {
+  readonly steer: number
+  readonly angle: number
+}
 
 export class VehicleView {
   readonly root = new THREE.Group()
@@ -21,9 +30,9 @@ export class VehicleView {
   readonly #nodeOfVertex: Uint32Array
   readonly #mesh: THREE.Mesh
   readonly #positions: Float32Array
-  readonly #wheels: THREE.Group[] = []
+  /** Per wheel: outer group = hub position + body orientation + steer; inner = spin. */
+  readonly #wheels: { steer: THREE.Group; spin: THREE.Group }[] = []
   readonly #wheelNodes: readonly number[]
-  readonly #radius: number
   readonly #beams: THREE.LineSegments
   readonly #beamPos: Float32Array
   readonly #disposables: { dispose(): void }[] = []
@@ -31,7 +40,6 @@ export class VehicleView {
   constructor(def: VehicleDef, vb: VehicleBody) {
     this.#body = vb.body
     this.#wheelNodes = vb.wheelNodes
-    this.#radius = def.tyre.radius
     const skin = buildSkin(vb.map, vb.body.pos)
     this.#nodeOfVertex = skin.nodeOfVertex
     const geo = new THREE.BufferGeometry()
@@ -65,14 +73,24 @@ export class VehicleView {
     rimGeo.rotateZ(Math.PI / 2)
     const tyreMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.85 })
     const rimMat = new THREE.MeshStandardMaterial({ color: 0xb8bcc2, metalness: 0.8, roughness: 0.3 })
-    this.#disposables.push(tyreGeo, rimGeo, tyreMat, rimMat)
+    // Spokes make the rotation readable (5 bars across the rim face).
+    const spokeGeo = new THREE.BoxGeometry(def.tyre.width * 1.06, def.tyre.radius * 1.15, 0.035)
+    const spokeMat = new THREE.MeshStandardMaterial({ color: 0x3a3e45, metalness: 0.6, roughness: 0.4 })
+    this.#disposables.push(tyreGeo, rimGeo, tyreMat, rimMat, spokeGeo, spokeMat)
     for (let i = 0; i < def.wheels.length; i++) {
-      const g = new THREE.Group()
+      const steer = new THREE.Group()
+      const spin = new THREE.Group()
       const tyre = new THREE.Mesh(tyreGeo, tyreMat)
       tyre.castShadow = true
-      g.add(tyre, new THREE.Mesh(rimGeo, rimMat))
-      this.#wheels.push(g)
-      this.root.add(g)
+      spin.add(tyre, new THREE.Mesh(rimGeo, rimMat))
+      for (let s = 0; s < 5; s++) {
+        const spoke = new THREE.Mesh(spokeGeo, spokeMat)
+        spoke.rotation.x = (s * Math.PI) / 5
+        spin.add(spoke)
+      }
+      steer.add(spin)
+      this.#wheels.push({ steer, spin })
+      this.root.add(steer)
     }
 
     this.#beamPos = new Float32Array(vb.body.beamCount * 6)
@@ -99,8 +117,9 @@ export class VehicleView {
   /**
    * @param prev  node positions at previous physics step
    * @param alpha interpolation factor between prev and current
+   * @param wheels steer (rad, + left) and spin angle per wheel
    */
-  update(prev: Float64Array, alpha: number, frame: BodyFrame): void {
+  update(prev: Float64Array, alpha: number, frame: BodyFrame, wheels: readonly WheelPose[]): void {
     const cur = this.#body.pos
     const out = this.#positions
     const map = this.#nodeOfVertex
@@ -119,15 +138,19 @@ export class VehicleView {
     const m = tmpM
     tmpL.set(frame.uy * frame.fz - frame.uz * frame.fy, frame.uz * frame.fx - frame.ux * frame.fz, frame.ux * frame.fy - frame.uy * frame.fx)
     m.makeBasis(tmpL, tmpU.set(frame.ux, frame.uy, frame.uz), tmpF.set(frame.fx, frame.fy, frame.fz))
+    tmpQ.setFromRotationMatrix(m)
     for (let i = 0; i < this.#wheels.length; i++) {
-      const w = this.#wheels[i]!
+      const { steer, spin } = this.#wheels[i]!
+      const pose = wheels[i]
       const k = this.#wheelNodes[i]! * 3
-      w.quaternion.setFromRotationMatrix(m)
-      w.position.set(
-        prev[k]! * ia + cur[k]! * alpha + frame.ux * this.#radius,
-        prev[k + 1]! * ia + cur[k + 1]! * alpha + frame.uy * this.#radius,
-        prev[k + 2]! * ia + cur[k + 2]! * alpha + frame.uz * this.#radius,
+      // Hub node = wheel centre. Steer about body up (+ = left), spin about the axle (+x).
+      steer.quaternion.copy(tmpQ).multiply(tmpS.setFromAxisAngle(AXIS_Y, pose?.steer ?? 0))
+      steer.position.set(
+        prev[k]! * ia + cur[k]! * alpha,
+        prev[k + 1]! * ia + cur[k + 1]! * alpha,
+        prev[k + 2]! * ia + cur[k + 2]! * alpha,
       )
+      spin.rotation.x = pose?.angle ?? 0
     }
 
     if (this.#beams.visible) {

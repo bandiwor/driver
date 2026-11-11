@@ -67,4 +67,12 @@ describe('TuningPanel', () => {
     expect(store.get(first.id)).toBe(first.min)
     expect(el.querySelectorAll('[role=tab]')).toHaveLength(store.groups().length)
   })
+  it('renders toggle params as switches', () => {
+    const store = new ParamStore([{ id: 't', label: 'Авто', group: 'G', min: 0, max: 1, step: 1, default: 1, kind: 'toggle' }])
+    const el = mount(<TuningPanel params={store} />)
+    const sw = el.querySelector('input[role=switch]') as HTMLInputElement
+    expect(sw.checked).toBe(true)
+    sw.click()
+    expect(store.get('t')).toBe(0)
+  })
 })

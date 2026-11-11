@@ -47,15 +47,16 @@ export function engineTorque(spec: EngineSpec, rpm: number, throttle: number): n
 }
 
 /**
- * Advance engine. `loadTorque` = torque the drivetrain draws through the
- * clutch (positive resists rotation). Returns net torque applied to flywheel.
+ * Throttle logic + combustion torque for this instant (idle controller, rev
+ * limiter with hysteresis). Updates throttle/limiter/load/torque on the state
+ * and returns the net engine torque (Nm). Does NOT integrate — the driveline
+ * solver integrates the flywheel together with the clutch (implicitly).
  */
-export function stepEngine(spec: EngineSpec, s: EngineState, pedal: number, loadTorque: number, dt: number): void {
+export function engineDrive(spec: EngineSpec, s: EngineState, pedal: number): number {
   const rpm = engineRpm(s)
   // Idle controller: blend in throttle as rpm falls toward idle.
   const idleThrottle = clamp((spec.idleRpm * 1.05 - rpm) / (spec.idleRpm * 0.3), 0, 0.35)
   let thr = Math.max(clamp(pedal, 0, 1), idleThrottle)
-  // Rev limiter with hysteresis.
   if (rpm >= spec.limiterRpm) s.limiterCut = true
   else if (rpm < spec.limiterRpm - 150) s.limiterCut = false
   if (s.limiterCut) thr = 0
@@ -64,6 +65,15 @@ export function stepEngine(spec: EngineSpec, s: EngineState, pedal: number, load
   s.torque = t
   const full = sample(spec.torqueCurve, rpm)
   s.load = full > 0 ? clamp((t + spec.frictionTorque) / full, 0, 1) : 0
+  return t
+}
+
+/**
+ * Free-revving engine step (clutch open). `loadTorque` = torque drawn by the
+ * drivetrain (positive resists rotation).
+ */
+export function stepEngine(spec: EngineSpec, s: EngineState, pedal: number, loadTorque: number, dt: number): void {
+  const t = engineDrive(spec, s, pedal)
   s.omega += ((t - loadTorque) / spec.inertia) * dt
   if (s.omega < 0) s.omega = 0
 }

@@ -28,6 +28,14 @@ async function connect(transport: Transport): Promise<{ host: WorkerHost; server
 
 const drive = { ...newControls(), throttle: 1 }
 
+/**
+ * Transfer transport is eventually consistent: buffers ping-pong between the
+ * threads over several event-loop turns before the newest state is visible.
+ */
+const flush = async (): Promise<void> => {
+  for (let i = 0; i < 20; i++) await new Promise((r) => setTimeout(r, 0))
+}
+
 describe.each<Transport>(['shared', 'transfer'])('WorkerHost (%s)', (transport) => {
   it('reproduces the inline simulation exactly (f32 precision)', async () => {
     const inline = new InlineHost(cfg)
@@ -36,8 +44,7 @@ describe.each<Transport>(['shared', 'transfer'])('WorkerHost (%s)', (transport) 
     host.setControls(drive)
     for (let i = 0; i < 90; i++) inline.fixedUpdate()
     await host.step(90)
-    // Let the transfer-mode 'state' message arrive.
-    await new Promise((r) => setTimeout(r, 0))
+    await flush()
     host.sync(0)
     inline.sync(0, 1)
     const a = inline.vehicle.body.pos
@@ -50,13 +57,15 @@ describe.each<Transport>(['shared', 'transfer'])('WorkerHost (%s)', (transport) 
 
   it('forwards commands and tuning params to the worker', async () => {
     const { host, server } = await connect(transport)
+    host.vehicle.params.set('gear.auto', 0) // manual, still in 1st (auto start gear)
     host.command({ type: 'shift', delta: 1 })
     host.vehicle.params.set('engine.limiter', 5000)
     await host.step(1)
-    await new Promise((r) => setTimeout(r, 0))
+    await flush()
     host.sync(0)
-    expect(host.telemetry.gear).toBe('1')
+    expect(host.telemetry.gear).toBe('2')
     expect(server.simulation?.vehicle.engineSpec.limiterRpm).toBe(5000)
+    expect(server.simulation?.vehicle.automatic).toBe(false)
   })
 
   it('reports impacts and broken beams from the worker', async () => {
@@ -66,7 +75,7 @@ describe.each<Transport>(['shared', 'transfer'])('WorkerHost (%s)', (transport) 
     const n = host.vehicle.body.nodeCount
     for (let i = 0; i < n; i++) host.command({ type: 'kick', node: i, v: [0, -60, 0] })
     await host.step(30)
-    await new Promise((r) => setTimeout(r, 0))
+    await flush()
     host.sync(0)
     expect(hits.length).toBeGreaterThan(0)
     expect(host.telemetry.damage).toBeGreaterThan(0)
@@ -78,9 +87,9 @@ describe('InlineHost', () => {
   it('steps on fixedUpdate and passes the loop alpha through', () => {
     const h = new InlineHost(cfg)
     h.setControls(drive)
-    for (let i = 0; i < 60; i++) h.fixedUpdate()
+    for (let i = 0; i < 180; i++) h.fixedUpdate()
     h.sync(0, 0.25)
     expect(h.alpha).toBe(0.25)
-    expect(h.telemetry.rpm).toBeGreaterThan(3000)
+    expect(h.telemetry.speedKmh).toBeGreaterThan(10)
   })
 })

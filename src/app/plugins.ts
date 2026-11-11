@@ -143,7 +143,7 @@ export const renderPlugin = (opts: RenderOptions): P => ({
       id: 'render',
       order: 60,
       update() {
-        view.update(v.prevPos, host.alpha, v.frame)
+        view.update(v.prevPos, host.alpha, v.frame, v.wheels)
         render.render()
       },
       dispose: () => {

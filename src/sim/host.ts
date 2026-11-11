@@ -12,7 +12,7 @@ import type { DriverControls } from '../input/input.ts'
 import { Vehicle, newTelemetry, type VehicleTelemetry } from '../vehicles/runtime.ts'
 import { getVehicle } from '../vehicles/registry.ts'
 import { Simulation, copyControls, impactStrength, type SimCommand, type SimConfig } from './simulation.ts'
-import { SnapshotSlot, layoutFor, newMeta, type SnapshotLayout } from './snapshot.ts'
+import { SnapshotSlot, layoutForVehicle, newMeta, type SnapshotLayout } from './snapshot.ts'
 import { TripleReader, initTripleCell } from './tripleBuffer.ts'
 import {
   CONTROLS_FLOATS,
@@ -160,7 +160,7 @@ export class WorkerHost extends HostBase implements PhysicsHost {
     this.transport = o.transport ?? (canShareMemory() ? 'shared' : 'transfer')
     // Shadow vehicle: same deterministic builder → same topology & node order.
     this.vehicle = new Vehicle(getVehicle(cfg.vehicleId), cfg.spawn)
-    this.#L = layoutFor(this.vehicle.body.nodeCount, this.vehicle.body.beamCount)
+    this.#L = layoutForVehicle(this.vehicle)
     this.#dtMs = 1000 / cfg.stepHz
     // UI edits the shadow's ParamStore; mirror them to the worker.
     this.#offParams = this.vehicle.params.subscribe((id, value) => this.command({ type: 'param', id, value }))

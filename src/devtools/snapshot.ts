@@ -8,7 +8,8 @@ import { Kernel } from '../core/kernel.ts'
 import { FixedStepLoop } from '../core/loop.ts'
 import { renderPlugin, simPlugin } from '../app/plugins.ts'
 import { InlineHost } from '../sim/host.ts'
-import { defaultSimConfig } from '../sim/simulation.ts'
+import { defaultSimConfig, newControls } from '../sim/simulation.ts'
+import type { DriverControls } from '../input/input.ts'
 import { T, type GameEvents } from '../app/tokens.ts'
 import { newTelemetry } from '../vehicles/runtime.ts'
 import { newPose, snapPose, SNAP_VIEWS, type SnapView } from '../render/cameraRig.ts'
@@ -42,6 +43,8 @@ export function parseSnapshotParams(q: URLSearchParams): SnapshotParams {
 export interface SnapshotApi {
   setView(view: SnapView): void
   simulate(seconds: number): void
+  /** Hold driver controls (throttle/brake/steer/handbrake/clutch) for `seconds`, then render. */
+  drive(controls: Partial<DriverControls>, seconds: number): void
   setBeams(on: boolean): void
   /** Arbitrary per-node impulse for deformation tests: (nodeIndex, vx, vy, vz). */
   kick(node: number, vx: number, vy: number, vz: number): void
@@ -67,6 +70,7 @@ export async function runSnapshot(canvas: HTMLCanvasElement, p: SnapshotParams):
   const host = new InlineHost(defaultSimConfig(p.vehicle))
   await k.use(simPlugin(host), renderPlugin({ canvas, snapshot: { width: p.w, height: p.h } }))
   const v = host.vehicle
+  const controls = newControls()
   const r = k.get(T.render)
   const view = k.get(T.vehicleView)
   const rig = k.get(T.camera)
@@ -85,11 +89,17 @@ export async function runSnapshot(canvas: HTMLCanvasElement, p: SnapshotParams):
       view.showBeams = on
       api.render()
     },
+    drive(c, s) {
+      Object.assign(controls, c)
+      host.setControls(controls)
+      loop.simulate(s)
+      api.render()
+    },
     kick(node, vx, vy, vz) {
       host.command({ type: 'kick', node, v: [vx, vy, vz] })
     },
     render() {
-      view.update(v.body.pos, 1, v.frame)
+      view.update(v.body.pos, 1, v.frame, v.wheels)
       snapPose(current, v.frame, rig.opts, pose)
       r.applyPose(pose)
       r.env.follow(v.frame.px, 0, v.frame.pz)

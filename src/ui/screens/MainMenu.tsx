@@ -4,7 +4,7 @@ import { listVehicles } from '../../vehicles/registry.ts'
 
 export const CONTROLS: readonly (readonly [string, string])[] = [
   ['W / ↑', 'Газ'],
-  ['S / ↓', 'Тормоз'],
+  ['S / ↓', 'Тормоз · задний ход (стоя)'],
   ['A D / ← →', 'Руль'],
   ['Space', 'Ручник'],
   ['Shift', 'Сцепление'],

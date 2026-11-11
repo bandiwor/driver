@@ -55,8 +55,9 @@ export class Simulation {
     this.cfg = cfg
     this.dt = 1 / cfg.stepHz
     this.world = new PhysicsWorld(new FlatGround(0), { substeps: cfg.substeps })
-    this.vehicle = new Vehicle(getVehicle(cfg.vehicleId), cfg.spawn)
+    this.vehicle = new Vehicle(getVehicle(cfg.vehicleId), cfg.spawn, this.world.ground)
     this.world.add(this.vehicle.body)
+    this.world.hooks.push(this.vehicle.chassis)
   }
 
   /** One fixed step. Returns the number of beams broken during it. */

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { SnapshotSlot, decodeGear, encodeGear, layoutFor, newMeta } from './snapshot.ts'
+import { SnapshotSlot, decodeGear, encodeGear, layoutFor, layoutForVehicle, newMeta } from './snapshot.ts'
 import { Simulation, defaultSimConfig } from './simulation.ts'
 import { Vehicle, newTelemetry } from '../vehicles/runtime.ts'
 import { sedan } from '../vehicles/sedan.ts'
@@ -17,7 +17,7 @@ describe('snapshot', () => {
     const sim = new Simulation(defaultSimConfig(sedan.id))
     sim.controls.throttle = 1
     for (let i = 0; i < 30; i++) sim.step()
-    const L = layoutFor(sim.vehicle.body.nodeCount, sim.vehicle.body.beamCount)
+    const L = layoutForVehicle(sim.vehicle)
     const slot = new SnapshotSlot(new ArrayBuffer(L.bytes), 0, L)
     slot.write(sim, 7, 1234.5, 120, newTelemetry())
     const shadow = new Vehicle(sedan)
@@ -29,5 +29,7 @@ describe('snapshot', () => {
     expect(shadow.frame.py).toBeCloseTo(sim.vehicle.frame.py, 5)
     expect(shadow.body.pos[5]).toBeCloseTo(sim.vehicle.body.pos[5]!, 5)
     expect(shadow.prevPos[5]).toBeCloseTo(sim.vehicle.prevPos[5]!, 5)
+    expect(shadow.wheels[2]!.omega).toBeCloseTo(sim.vehicle.wheels[2]!.omega, 4)
+    expect(shadow.wheels[0]!.load).toBeCloseTo(sim.vehicle.wheels[0]!.load, 0)
   })
 })

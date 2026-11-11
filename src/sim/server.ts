@@ -8,7 +8,7 @@
  * MessageChannel (no 4 ms setTimeout clamping) so queued messages are handled.
  */
 import { Simulation, impactStrength } from './simulation.ts'
-import { SnapshotSlot, layoutFor, type SnapshotLayout } from './snapshot.ts'
+import { SnapshotSlot, layoutForVehicle, type SnapshotLayout } from './snapshot.ts'
 import { TripleWriter } from './tripleBuffer.ts'
 import { newTelemetry } from '../vehicles/runtime.ts'
 import {
@@ -117,7 +117,7 @@ export class SimServer {
 
   #start(msg: InitMsg): void {
     const sim = new Simulation(msg.cfg)
-    const L = layoutFor(sim.vehicle.body.nodeCount, sim.vehicle.body.beamCount)
+    const L = layoutForVehicle(sim.vehicle)
     this.#sim = sim
     this.#layout = L
     this.#init = msg

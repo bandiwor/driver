@@ -1,5 +1,45 @@
 import { curve } from '../physics/vehicle/curve.ts'
+import type { ParamDef } from '../core/params.ts'
 import type { VehicleDef } from './types.ts'
+
+const deg = Math.PI / 180
+
+const params: ParamDef[] = [
+  // Подвеска
+  { id: 'susp.front.spring', label: 'Пружина перед', group: 'Подвеска', min: 10000, max: 120000, step: 500, default: 42000, unit: 'Н/м' },
+  { id: 'susp.rear.spring', label: 'Пружина зад', group: 'Подвеска', min: 10000, max: 120000, step: 500, default: 38000, unit: 'Н/м' },
+  { id: 'susp.front.bump', label: 'Сжатие перед', group: 'Подвеска', min: 500, max: 10000, step: 100, default: 3000, unit: 'Н·с/м' },
+  { id: 'susp.front.rebound', label: 'Отбой перед', group: 'Подвеска', min: 500, max: 12000, step: 100, default: 4200, unit: 'Н·с/м' },
+  { id: 'susp.rear.bump', label: 'Сжатие зад', group: 'Подвеска', min: 500, max: 10000, step: 100, default: 2800, unit: 'Н·с/м' },
+  { id: 'susp.rear.rebound', label: 'Отбой зад', group: 'Подвеска', min: 500, max: 12000, step: 100, default: 3900, unit: 'Н·с/м' },
+  { id: 'susp.front.arb', label: 'Стабилизатор перед', group: 'Подвеска', min: 0, max: 60000, step: 500, default: 16000, unit: 'Н/м' },
+  { id: 'susp.rear.arb', label: 'Стабилизатор зад', group: 'Подвеска', min: 0, max: 60000, step: 500, default: 9000, unit: 'Н/м' },
+  // Геометрия
+  { id: 'align.front.camber', label: 'Развал перед', group: 'Геометрия', min: -5, max: 2, step: 0.1, default: -1.2, unit: '°' },
+  { id: 'align.rear.camber', label: 'Развал зад', group: 'Геометрия', min: -5, max: 2, step: 0.1, default: -1, unit: '°' },
+  { id: 'align.front.toe', label: 'Схождение перед', group: 'Геометрия', min: -1, max: 1, step: 0.05, default: 0.1, unit: '°', hint: '+ = внутрь' },
+  { id: 'align.rear.toe', label: 'Схождение зад', group: 'Геометрия', min: -1, max: 1, step: 0.05, default: 0.2, unit: '°', hint: '+ = внутрь' },
+  { id: 'steer.lock', label: 'Угол руля', group: 'Геометрия', min: 15, max: 50, step: 1, default: 34, unit: '°' },
+  { id: 'steer.ackermann', label: 'Аккерман', group: 'Геометрия', min: 0, max: 1, step: 0.05, default: 0.8 },
+  // Трансмиссия
+  { id: 'gear.auto', label: 'Автомат', group: 'Трансмиссия', min: 0, max: 1, step: 1, default: 1, kind: 'toggle' },
+  { id: 'gear.final', label: 'Главная пара', group: 'Трансмиссия', min: 2.5, max: 5.5, step: 0.01, default: 3.73 },
+  { id: 'gear.shiftTime', label: 'Время переключения', group: 'Трансмиссия', min: 0.05, max: 0.8, step: 0.01, default: 0.22, unit: 'с' },
+  { id: 'drive.split', label: 'Момент на перед', group: 'Трансмиссия', min: 0, max: 1, step: 0.05, default: 0, hint: '0 задний, 1 передний, между — полный' },
+  { id: 'diff.lock', label: 'Блокировка дифф.', group: 'Трансмиссия', min: 0, max: 1, step: 0.05, default: 0.25, hint: '0 открытый, 1 заблокирован' },
+  // Двигатель
+  { id: 'engine.torqueScale', label: 'Множитель момента', group: 'Двигатель', min: 0.5, max: 2.5, step: 0.05, default: 1 },
+  { id: 'engine.limiter', label: 'Отсечка', group: 'Двигатель', min: 5000, max: 9000, step: 50, default: 7000, unit: 'об/мин' },
+  // Шины
+  { id: 'tyre.grip', label: 'Сцепление шин', group: 'Шины', min: 0.5, max: 1.6, step: 0.01, default: 1.05, unit: 'μ' },
+  { id: 'tyre.front.pressure', label: 'Давление перед', group: 'Шины', min: 120, max: 350, step: 5, default: 230, unit: 'кПа' },
+  { id: 'tyre.rear.pressure', label: 'Давление зад', group: 'Шины', min: 120, max: 350, step: 5, default: 230, unit: 'кПа' },
+  // Тормоза
+  { id: 'brake.force', label: 'Сила тормозов', group: 'Тормоза', min: 0.3, max: 1.5, step: 0.05, default: 1 },
+  { id: 'brake.bias', label: 'Баланс тормозов', group: 'Тормоза', min: 0.4, max: 0.8, step: 0.01, default: 0.62, hint: 'доля на переднюю ось' },
+  // Кузов
+  { id: 'body.stiffness', label: 'Жёсткость кузова', group: 'Кузов', min: 0.2, max: 3, step: 0.05, default: 1 },
+]
 
 /** "Kuzov K1" — original mid-size RWD sedan used as the reference vehicle. */
 export const sedan: VehicleDef = {
@@ -18,13 +58,39 @@ export const sedan: VehicleDef = {
   ],
   body: { nodeMass: 30, spring: 2.5e6, damp: 600, yieldStrain: 0.04, breakStrain: 0.35 },
   wheels: [
-    { id: 'FL', x: 0.78, y: 0.32, z: 1.38, steer: true, driven: false, brakeTorque: 2400 },
-    { id: 'FR', x: -0.78, y: 0.32, z: 1.38, steer: true, driven: false, brakeTorque: 2400 },
-    { id: 'RL', x: 0.78, y: 0.32, z: -1.32, steer: false, driven: true, brakeTorque: 1600 },
-    { id: 'RR', x: -0.78, y: 0.32, z: -1.32, steer: false, driven: true, brakeTorque: 1600 },
+    { id: 'FL', x: 0.76, y: 0.32, z: 1.38, axle: 'front', steer: true, brakeTorque: 2400 },
+    { id: 'FR', x: -0.76, y: 0.32, z: 1.38, axle: 'front', steer: true, brakeTorque: 2400 },
+    { id: 'RL', x: 0.76, y: 0.32, z: -1.32, axle: 'rear', steer: false, brakeTorque: 1500 },
+    { id: 'RR', x: -0.76, y: 0.32, z: -1.32, axle: 'rear', steer: false, brakeTorque: 1500 },
   ],
-  suspensionFront: { spring: 38000, damperBump: 2600, damperRebound: 3800, travel: 0.18, antiRoll: 14000 },
-  suspensionRear: { spring: 34000, damperBump: 2400, damperRebound: 3400, travel: 0.2, antiRoll: 8000 },
+  wheelMass: 38,
+  wheelInertia: 1.1,
+  handbrakeTorque: 2500,
+  suspensionFront: {
+    spring: 42000,
+    damperBump: 3000,
+    damperRebound: 4200,
+    travel: 0.09,
+    droop: 0.1,
+    antiRoll: 16000,
+    armLength: 0.42,
+    strutHeight: 0.42,
+    camber: -1.2 * deg,
+    toe: 0.1 * deg,
+  },
+  suspensionRear: {
+    spring: 38000,
+    damperBump: 2800,
+    damperRebound: 3900,
+    travel: 0.1,
+    droop: 0.11,
+    antiRoll: 9000,
+    armLength: 0.42,
+    strutHeight: 0.42,
+    camber: -1 * deg,
+    toe: 0.2 * deg,
+  },
+  drivetrain: { frontSplit: 0, diffLock: 0.25, automatic: true },
   engine: {
     torqueCurve: curve([
       [0, 0],
@@ -46,22 +112,25 @@ export const sedan: VehicleDef = {
     cylinders: 6,
   },
   gearbox: { ratios: [3.6, 2.19, 1.41, 1.0, 0.83, 0.69], reverse: 3.4, finalDrive: 3.73, shiftTime: 0.22, clutchMaxTorque: 600 },
-  tyre: { B: 10, C: 1.9, D: 1.05, E: 0.97, lateralScale: 1, radius: 0.32, width: 0.225, rollingResistance: 0.012 },
-  maxSteer: 0.6,
+  tyre: {
+    B: 10,
+    C: 1.9,
+    D: 1.05,
+    E: 0.97,
+    lateralScale: 1,
+    radius: 0.32,
+    width: 0.225,
+    rollingResistance: 0.012,
+    loadSensitivity: 0.12,
+    radialStiffness: 240000,
+    radialDamping: 600,
+    relaxationLength: 0.25,
+    camberStiffness: 0.6,
+    pressure: 230,
+  },
+  maxSteer: 34 * deg,
+  ackermann: 0.8,
+  dragArea: 0.68,
   eye: [0.38, 1.12, -0.1],
-  params: [
-    { id: 'susp.front.spring', label: 'Пружина перед', group: 'Подвеска', min: 10000, max: 120000, step: 500, default: 38000, unit: 'Н/м' },
-    { id: 'susp.rear.spring', label: 'Пружина зад', group: 'Подвеска', min: 10000, max: 120000, step: 500, default: 34000, unit: 'Н/м' },
-    { id: 'susp.front.bump', label: 'Отбой/сжатие перед', group: 'Подвеска', min: 500, max: 10000, step: 100, default: 2600, unit: 'Н·с/м' },
-    { id: 'susp.rear.bump', label: 'Отбой/сжатие зад', group: 'Подвеска', min: 500, max: 10000, step: 100, default: 2400, unit: 'Н·с/м' },
-    { id: 'susp.front.arb', label: 'Стабилизатор перед', group: 'Подвеска', min: 0, max: 50000, step: 500, default: 14000, unit: 'Н/м' },
-    { id: 'susp.rear.arb', label: 'Стабилизатор зад', group: 'Подвеска', min: 0, max: 50000, step: 500, default: 8000, unit: 'Н/м' },
-    { id: 'gear.final', label: 'Главная пара', group: 'Трансмиссия', min: 2.5, max: 5.5, step: 0.01, default: 3.73 },
-    { id: 'gear.shiftTime', label: 'Время переключения', group: 'Трансмиссия', min: 0.05, max: 0.8, step: 0.01, default: 0.22, unit: 'с' },
-    { id: 'engine.torqueScale', label: 'Множитель момента', group: 'Двигатель', min: 0.5, max: 2.5, step: 0.05, default: 1 },
-    { id: 'engine.limiter', label: 'Отсечка', group: 'Двигатель', min: 5000, max: 9000, step: 50, default: 7000, unit: 'об/мин' },
-    { id: 'tyre.grip', label: 'Сцепление шин', group: 'Шины', min: 0.5, max: 1.6, step: 0.01, default: 1.05, unit: 'μ' },
-    { id: 'brake.bias', label: 'Баланс тормозов', group: 'Тормоза', min: 0.4, max: 0.8, step: 0.01, default: 0.6, hint: 'доля на переднюю ось' },
-    { id: 'body.stiffness', label: 'Жёсткость кузова', group: 'Кузов', min: 0.2, max: 3, step: 0.05, default: 1 },
-  ],
+  params,
 }

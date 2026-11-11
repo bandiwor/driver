@@ -13,6 +13,8 @@ export interface ParamDef {
   readonly default: number
   readonly unit?: string
   readonly hint?: string
+  /** UI widget; default slider. `toggle` means 0/1. */
+  readonly kind?: 'slider' | 'toggle'
 }
 
 export type ParamValues = Readonly<Record<string, number>>

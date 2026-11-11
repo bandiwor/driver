@@ -55,11 +55,20 @@ await step('start driving', async () => {
   await page.getByRole('button', { name: 'Поехали' }).click()
   await page.locator('.k-hud').waitFor()
   await page.keyboard.down('KeyW')
-  await page.waitForTimeout(1200)
+  await page.waitForTimeout(2500)
   const rpm = Number(await page.locator('svg[role=meter]').getAttribute('aria-valuenow'))
+  const kmh = Number(await page.locator('.k-hud__speed-value').textContent())
+  if (!(rpm > 2000)) throw new Error(`engine did not rev: ${rpm} rpm`)
+  if (!(kmh > 15)) throw new Error(`car did not accelerate: ${kmh} km/h`)
+  await page.keyboard.down('KeyD')
+  await page.waitForTimeout(600)
+  await page.keyboard.up('KeyD')
   await page.keyboard.up('KeyW')
-  if (!(rpm > 2500)) throw new Error(`engine did not rev: ${rpm} rpm`)
   await shot('hud-chase')
+  // Brake to a stop.
+  await page.keyboard.down('KeyS')
+  await page.waitForFunction(() => Number(document.querySelector('.k-hud__speed-value')?.textContent) < 3, null, { timeout: 15_000 })
+  await page.keyboard.up('KeyS')
 })
 await step('camera modes', async () => {
   for (const name of ['cockpit', 'top', 'orbit']) {

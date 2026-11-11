@@ -6,6 +6,7 @@
  *   f32 scalars [telemetry …, frame (12)]
  *   f32 pos     nodes·3   — state after the last step
  *   f32 prev    nodes·3   — state before the last step (render interpolation)
+ *   f32 wheels  wheels·8  — ω, spin angle, steer, load, slip ratio, slip angle, compression, contact
  *   u8  flags   beams     — beam flags (broken bits)
  *
  * Views are created once per slot; reading/writing allocates nothing.
@@ -30,9 +31,13 @@ export const S = {
 
 const FRAME_KEYS = ['px', 'py', 'pz', 'fx', 'fy', 'fz', 'ux', 'uy', 'uz', 'vx', 'vy', 'vz'] as const satisfies readonly (keyof BodyFrame)[]
 
+export const WHEEL_FLOATS = 8
+
 export interface SnapshotLayout {
   readonly nodes: number
   readonly beams: number
+  readonly wheels: number
+  readonly wheelsOff: number
   readonly scalarsOff: number
   readonly posOff: number
   readonly prevOff: number
@@ -43,13 +48,17 @@ export interface SnapshotLayout {
 
 const align8 = (n: number): number => Math.ceil(n / 8) * 8
 
-export function layoutFor(nodes: number, beams: number): SnapshotLayout {
+export function layoutFor(nodes: number, beams: number, wheels = 0): SnapshotLayout {
   const scalarsOff = 3 * 8
   const posOff = scalarsOff + S.count * 4
   const prevOff = posOff + nodes * 12
-  const flagsOff = prevOff + nodes * 12
-  return { nodes, beams, scalarsOff, posOff, prevOff, flagsOff, bytes: align8(flagsOff + beams) }
+  const wheelsOff = prevOff + nodes * 12
+  const flagsOff = wheelsOff + wheels * WHEEL_FLOATS * 4
+  return { nodes, beams, wheels, scalarsOff, posOff, prevOff, wheelsOff, flagsOff, bytes: align8(flagsOff + beams) }
 }
+
+export const layoutForVehicle = (v: Vehicle): SnapshotLayout =>
+  layoutFor(v.body.nodeCount, v.body.beamCount, v.wheels.length)
 
 /** Gear label <-> number encoding for the f32 block. */
 export const encodeGear = (label: string): number => (label === 'R' ? -1 : label === 'N' ? 0 : Number(label))
@@ -68,6 +77,7 @@ export class SnapshotSlot {
   readonly scalars: Float32Array
   readonly pos: Float32Array
   readonly prev: Float32Array
+  readonly wheels: Float32Array
   readonly flags: Uint8Array
 
   constructor(buf: ArrayBufferLike, offset: number, readonly L: SnapshotLayout) {
@@ -75,6 +85,7 @@ export class SnapshotSlot {
     this.scalars = new Float32Array(buf, offset + L.scalarsOff, S.count)
     this.pos = new Float32Array(buf, offset + L.posOff, L.nodes * 3)
     this.prev = new Float32Array(buf, offset + L.prevOff, L.nodes * 3)
+    this.wheels = new Float32Array(buf, offset + L.wheelsOff, L.wheels * WHEEL_FLOATS)
     this.flags = new Uint8Array(buf, offset + L.flagsOff, L.beams)
   }
 
@@ -99,6 +110,20 @@ export class SnapshotSlot {
     this.pos.set(v.body.pos)
     this.prev.set(v.prevPos)
     this.flags.set(v.body.flags)
+    const wf = this.wheels
+    const ws = v.wheels
+    for (let i = 0; i < this.L.wheels; i++) {
+      const w = ws[i]!
+      const o = i * WHEEL_FLOATS
+      wf[o] = w.omega
+      wf[o + 1] = w.angle
+      wf[o + 2] = w.steer
+      wf[o + 3] = w.load
+      wf[o + 4] = w.slipRatio
+      wf[o + 5] = w.slipAngle
+      wf[o + 6] = w.compression
+      wf[o + 7] = w.contact ? 1 : 0
+    }
   }
 
   /** Copies the snapshot into a (shadow) vehicle + telemetry. */
@@ -121,6 +146,20 @@ export class SnapshotSlot {
     v.body.pos.set(this.pos)
     v.prevPos.set(this.prev)
     v.body.flags.set(this.flags)
+    const wf = this.wheels
+    const ws = v.wheels
+    for (let i = 0; i < this.L.wheels; i++) {
+      const w = ws[i]!
+      const o = i * WHEEL_FLOATS
+      w.omega = wf[o]!
+      w.angle = wf[o + 1]!
+      w.steer = wf[o + 2]!
+      w.load = wf[o + 3]!
+      w.slipRatio = wf[o + 4]!
+      w.slipAngle = wf[o + 5]!
+      w.compression = wf[o + 6]!
+      w.contact = wf[o + 7]! > 0.5
+    }
   }
 }
 

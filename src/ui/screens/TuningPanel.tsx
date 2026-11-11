@@ -2,12 +2,13 @@
 import type { JSX } from 'preact'
 import { useState } from 'preact/hooks'
 import type { ParamStore } from '../../core/params.ts'
-import { Button, Panel, Slider, Tabs } from '../kit/kit.tsx'
+import { Button, Panel, Slider, Tabs, Toggle } from '../kit/kit.tsx'
 import type { IconName } from '../icons/Icon.tsx'
 import { paramsVersion } from '../store.ts'
 
 const GROUP_ICONS: Readonly<Record<string, IconName>> = {
   Подвеска: 'spring',
+  Геометрия: 'wheel',
   Трансмиссия: 'gear',
   Двигатель: 'engine',
   Шины: 'tyre',
@@ -45,7 +46,10 @@ export function TuningPanel({ params, onClose }: TuningPanelProps): JSX.Element 
       <div class="k-tuning__list">
         {params.defs
           .filter((d) => d.group === group)
-          .map((d) => (
+          .map((d) =>
+            d.kind === 'toggle' ? (
+              <Toggle key={d.id} label={d.label} checked={params.get(d.id) >= 0.5} onChange={(on) => params.set(d.id, on ? 1 : 0)} />
+            ) : (
             <Slider
               key={d.id}
               label={d.label}
@@ -58,7 +62,8 @@ export function TuningPanel({ params, onClose }: TuningPanelProps): JSX.Element 
               defaultValue={d.default}
               onInput={(v) => params.set(d.id, v)}
             />
-          ))}
+            ),
+          )}
       </div>
     </Panel>
   )

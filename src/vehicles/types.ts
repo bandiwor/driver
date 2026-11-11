@@ -29,36 +29,64 @@ export interface BodyMaterial {
 
 export interface WheelDef {
   id: string
-  /** Body-local, +x = left. */
+  /** Wheel centre, body-local design coordinates; +x = left. */
   x: number
   y: number
   z: number
+  axle: 'front' | 'rear'
   steer: boolean
-  driven: boolean
-  brakeTorque: number // Nm max
+  /** Max brake torque at the default brake bias, Nm. */
+  brakeTorque: number
 }
 
 export interface SuspensionDef {
   spring: number // N/m
   damperBump: number // N·s/m
   damperRebound: number
-  travel: number // m
-  antiRoll: number // N/m equivalent
+  /** Compression travel from design ride height, m. */
+  travel: number
+  /** Droop (extension) travel from design ride height, m. */
+  droop: number
+  antiRoll: number // N/m of left-right compression difference
+  /** Lower-arm length (hub → inner pivot), m. */
+  armLength: number
+  /** Strut top mount height above the hub, m. */
+  strutHeight: number
+  /** Static camber (rad, negative = top inward) and toe (rad, + = toe-in). */
+  camber: number
+  toe: number
+}
+
+export interface DrivetrainDef {
+  /** Share of drive torque to the front axle: 0 RWD, 1 FWD, between = AWD. */
+  frontSplit: number
+  /** Axle diff locking 0 (open) … 1 (locked). */
+  diffLock: number
+  /** Automatic gearbox by default. */
+  automatic: boolean
 }
 
 export interface VehicleDef {
   id: string
   name: string
-  mass: number // kg target
+  mass: number // kg target (total, incl. unsprung)
   stations: readonly BodyStation[]
   body: BodyMaterial
   wheels: readonly WheelDef[]
+  wheelMass: number // unsprung mass per corner, kg
+  wheelInertia: number // kg·m²
+  handbrakeTorque: number // Nm per rear wheel
   suspensionFront: SuspensionDef
   suspensionRear: SuspensionDef
+  drivetrain: DrivetrainDef
   engine: EngineSpec
   gearbox: GearboxSpec
   tyre: TyreSpec
   maxSteer: number // rad
+  /** 0 = parallel steer, 1 = full Ackermann. */
+  ackermann: number
+  /** Drag area Cd·A, m². */
+  dragArea: number
   /** Driver eye position for cockpit camera, body-local design coordinates. */
   eye: readonly [number, number, number]
   color: number
