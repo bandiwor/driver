@@ -16,6 +16,38 @@ const make = (): Simulation => {
   return sim
 }
 const speed = (sim: Simulation): number => sim.vehicle.forwardSpeed()
+const run = (sim: Simulation, seconds: number): void => {
+  for (let i = 0; i < HZ * seconds; i++) sim.step()
+}
+/** Settled car with a manual gearbox in neutral, engine idling. */
+const manual = (): Simulation => {
+  const sim = make()
+  sim.vehicle.params.set('gear.auto', 0)
+  sim.vehicle.gearbox.gear = 0
+  run(sim, 0.5)
+  return sim
+}
+/**
+ * Driver-style launch: clutch down, select gear, set throttle, release the
+ * clutch pedal linearly over `release` s. Returns whether the gear engaged.
+ */
+const launch = (sim: Simulation, gear: number, throttle: number, release = 1.2): boolean => {
+  sim.controls.clutch = 1
+  run(sim, 0.3)
+  let ok = true
+  while (sim.vehicle.gearbox.gear < gear && ok) {
+    ok = sim.vehicle.shift(1)
+    run(sim, 0.2)
+  }
+  sim.controls.throttle = throttle
+  const n = HZ * release
+  for (let i = 0; i < n; i++) {
+    sim.controls.clutch = 1 - i / n
+    sim.step()
+  }
+  sim.controls.clutch = 0
+  return ok
+}
 const heading = (sim: Simulation): number => Math.atan2(sim.vehicle.frame.fx, sim.vehicle.frame.fz)
 
 /** Accelerate (full throttle, straight) until `kmh`; returns elapsed seconds. */
@@ -155,20 +187,88 @@ describe('vehicle dynamics', () => {
     expect(sim.vehicle.telemetry(tel).gear).not.toBe('R')
   })
 
-  it('manual gearbox: neutral does not drive, first gear does', () => {
-    const sim = make()
-    sim.vehicle.params.set('gear.auto', 0)
-    sim.vehicle.gearbox.gear = 0
+  it('manual: neutral does not drive, first gear with a smooth clutch release does', () => {
+    const sim = manual()
     sim.controls.throttle = 1
-    for (let i = 0; i < HZ * 2; i++) sim.step()
+    run(sim, 2)
     expect(Math.abs(speed(sim))).toBeLessThan(0.1)
     expect(sim.vehicle.telemetry(tel).rpm).toBeGreaterThan(5000)
     sim.controls.throttle = 0
-    for (let i = 0; i < HZ; i++) sim.step()
-    sim.vehicle.shift(1)
-    sim.controls.throttle = 1
-    for (let i = 0; i < HZ * 2; i++) sim.step()
-    expect(speed(sim)).toBeGreaterThan(5)
+    run(sim, 1)
+    expect(launch(sim, 1, 0.5)).toBe(true)
+    expect(speed(sim)).toBeGreaterThan(3)
+    expect(sim.vehicle.engine.running).toBe(true)
+  })
+
+  it('manual: dumping the clutch at idle stalls the engine', () => {
+    const sim = manual()
+    sim.controls.clutch = 1
+    run(sim, 0.3)
+    expect(sim.vehicle.shift(1)).toBe(true)
+    sim.controls.clutch = 0
+    run(sim, 1.5)
+    expect(sim.vehicle.engine.running).toBe(false)
+    expect(sim.vehicle.telemetry(tel).rpm).toBeLessThan(100)
+  })
+
+  it('manual: pulling away in 5th stalls even with throttle', () => {
+    const sim = manual()
+    expect(launch(sim, 5, 0.5)).toBe(true)
+    run(sim, 1.5)
+    expect(sim.vehicle.engine.running).toBe(false)
+    expect(speed(sim) * 3.6).toBeLessThan(5)
+  })
+
+  it('manual: braking to a stop in gear without the clutch stalls; neutral + starter restarts', () => {
+    const sim = manual()
+    launch(sim, 1, 0.6)
+    run(sim, 1)
+    sim.controls.throttle = 0
+    sim.controls.brake = 1
+    run(sim, 3)
+    expect(sim.vehicle.engine.running).toBe(false)
+    sim.controls.brake = 0
+    sim.controls.clutch = 1
+    run(sim, 0.3)
+    sim.vehicle.shift(-1) // → N
+    sim.controls.starter = 1
+    run(sim, 1.2)
+    sim.controls.starter = 0
+    run(sim, 1)
+    expect(sim.vehicle.engine.running).toBe(true)
+    expect(sim.vehicle.telemetry(tel).rpm).toBeGreaterThan(700)
+  })
+
+  it('manual: engaging a gear without the clutch grinds and is refused', () => {
+    const sim = manual()
+    expect(sim.vehicle.shift(1)).toBe(false)
+    expect(sim.vehicle.telemetry(tel).grind).toBe(true)
+    expect(sim.vehicle.telemetry(tel).gear).toBe('N')
+    sim.controls.clutch = 1
+    run(sim, 0.3)
+    expect(sim.vehicle.shift(1)).toBe(true)
+  })
+
+  it('manual: reverse only near standstill; neutral is always reachable', () => {
+    const sim = manual()
+    launch(sim, 1, 0.6)
+    run(sim, 1.5)
+    sim.controls.clutch = 1
+    run(sim, 0.3)
+    expect(sim.vehicle.shift(-1)).toBe(true) // 1 → N while rolling
+    expect(sim.vehicle.shift(-1)).toBe(false) // N → R while rolling forward: refused
+  })
+
+  it('automatic never stalls when braking to a stop', () => {
+    const sim = make()
+    accelerateTo(sim, 60)
+    sim.controls.brake = 1
+    run(sim, 0.3)
+    sim.controls.brake = 0.6
+    while (speed(sim) > 0.2) sim.step()
+    sim.controls.brake = 0
+    run(sim, 2)
+    expect(sim.vehicle.engine.running).toBe(true)
   })
 
   it('front-wheel drive split moves the car too; handbrake locks the rears', () => {

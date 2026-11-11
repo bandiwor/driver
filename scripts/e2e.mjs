@@ -49,6 +49,9 @@ const step = async (name, fn) => {
 await step('main menu', async () => {
   await page.goto(a.physics === 'inline' ? `${base}?physics=inline` : base)
   await page.getByRole('button', { name: 'Поехали' }).waitFor()
+  await page.getByRole('radio', { name: 'Механика' }).click()
+  await page.getByText('заглохнешь').waitFor()
+  await page.getByRole('radio', { name: 'Автомат' }).click()
   await shot('menu')
 })
 await step('start driving', async () => {
@@ -71,7 +74,7 @@ await step('start driving', async () => {
   await page.keyboard.up('KeyS')
 })
 await step('camera modes', async () => {
-  for (const name of ['cockpit', 'top', 'orbit']) {
+  for (const name of ['cockpit', 'top', 'free']) {
     await page.keyboard.press('KeyC')
     await page.waitForTimeout(300)
     await shot(`hud-${name}`)
@@ -113,6 +116,71 @@ await step('drive keys work after touching a tuning slider (focus regression)', 
   const kmh = Number(await page.locator('.k-hud__speed-value').textContent())
   await page.keyboard.up('KeyW')
   if (!(kmh > 10)) throw new Error(`car does not drive after using a slider: ${kmh} km/h`)
+})
+await step('free camera: mouse drag rotates, wheel zooms', async () => {
+  const canvas = page.locator('#viewport')
+  const box = await canvas.boundingBox()
+  const cx = box.x + box.width / 2
+  const cy = box.y + box.height / 2
+  await page.mouse.move(cx, cy)
+  await page.mouse.down()
+  await page.mouse.move(cx + 250, cy - 120, { steps: 8 })
+  await page.mouse.up()
+  await page.locator('.k-chip', { hasText: 'Свободная' }).waitFor()
+  await page.mouse.wheel(0, 600)
+  await page.waitForTimeout(400)
+  await shot('camera-free')
+  await page.mouse.wheel(0, -900)
+  await page.waitForTimeout(400)
+  await shot('camera-free-zoom')
+  while (!(await page.locator('.k-chip', { hasText: 'Сзади' }).count())) {
+    await page.keyboard.press('KeyC')
+    await page.waitForTimeout(250)
+  }
+})
+await step('manual gearbox: choose in pause, dump clutch → stall, starter, proper launch', async () => {
+  await page.keyboard.press('Escape')
+  await page.getByRole('radio', { name: 'Механика' }).click()
+  await page.getByRole('button', { name: /Продолжить/ }).click()
+  await page.locator('.k-scrim').waitFor({ state: 'detached' })
+  await page.keyboard.press('KeyR') // manual → neutral after reset
+  await page.waitForTimeout(500)
+  if ((await page.locator('svg[role=meter] .k-gauge__center').textContent()) !== 'N') throw new Error('manual should start in N')
+  // Gear without clutch → grind warning.
+  await page.keyboard.press('KeyE')
+  await page.locator('.k-alert--warn').waitFor()
+  // Clutch down, 1st, dump the clutch with no throttle → stall.
+  await page.keyboard.down('ShiftLeft')
+  await page.waitForTimeout(400)
+  await page.keyboard.press('KeyE')
+  await page.waitForTimeout(300)
+  await page.keyboard.up('ShiftLeft')
+  await page.locator('.k-alert--danger').waitFor({ timeout: 10_000 })
+  await shot('manual-stalled')
+  // Clutch down, neutral, crank with I until it runs.
+  await page.keyboard.down('ShiftLeft')
+  await page.waitForTimeout(300)
+  await page.keyboard.press('KeyQ')
+  await page.keyboard.down('KeyI')
+  await page.locator('.k-alert--danger').waitFor({ state: 'detached', timeout: 10_000 })
+  await page.keyboard.up('KeyI')
+  // Proper launch: 1st, throttle, let the clutch pedal travel up slowly.
+  await page.keyboard.press('KeyE')
+  await page.waitForTimeout(300)
+  await page.keyboard.down('KeyW')
+  await page.waitForTimeout(300)
+  await page.keyboard.up('ShiftLeft')
+  await page.waitForTimeout(3000)
+  const kmh = Number(await page.locator('.k-hud__speed-value').textContent())
+  const stalled = await page.locator('.k-alert--danger').count()
+  await page.keyboard.up('KeyW')
+  if (stalled || !(kmh > 8)) throw new Error(`manual launch failed: ${kmh} km/h, stalled=${stalled}`)
+  await shot('manual-driving')
+  // Back to automatic for the remaining steps.
+  await page.keyboard.press('Escape')
+  await page.getByRole('radio', { name: 'Автомат' }).click()
+  await page.getByRole('button', { name: /Продолжить/ }).click()
+  await page.locator('.k-scrim').waitFor({ state: 'detached' })
 })
 await step('pause menu', async () => {
   await page.keyboard.press('Escape')

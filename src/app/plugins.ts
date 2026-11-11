@@ -11,7 +11,7 @@ import type { Plugin } from '../core/kernel.ts'
 import { InputMapper } from '../input/input.ts'
 import type { AudioService } from '../audio/audio.ts'
 import { RenderService, type RenderOptions } from '../render/renderer.ts'
-import { CameraRig, newPose } from '../render/cameraRig.ts'
+import { CameraRig, newPose, type CameraMode } from '../render/cameraRig.ts'
 import { VehicleView } from '../render/vehicleView.ts'
 import { newTelemetry } from '../vehicles/runtime.ts'
 import { wallMs } from '../sim/protocol.ts'
@@ -147,6 +147,7 @@ export const renderPlugin = (opts: RenderOptions): P => ({
     ctx.provide(T.camera, rig)
     const pose = newPose()
     ctx.events.on('debug:toggle', () => (view.showBeams = !view.showBeams))
+    const offPointer = bindCameraPointer(opts.canvas, rig, (m) => ctx.events.emit('camera:mode', m))
     ctx.addSystem({
       id: 'camera',
       order: 50,
@@ -164,12 +165,70 @@ export const renderPlugin = (opts: RenderOptions): P => ({
         render.render()
       },
       dispose: () => {
+        offPointer()
         view.dispose()
         render.dispose()
       },
     })
   },
 })
+
+/**
+ * Mouse camera control on the canvas: drag (any button) rotates — free
+ * camera orbit, cockpit look-around; wheel zooms; double-click recentres the
+ * cockpit look. Pointer capture keeps the drag alive outside the canvas.
+ */
+const ctxMenu = (e: Event): void => e.preventDefault()
+
+export function bindCameraPointer(canvas: HTMLCanvasElement, rig: CameraRig, onMode: (m: CameraMode) => void): () => void {
+  const RAD_PER_PX = 0.006
+  let dragging = -1
+  let lx = 0
+  let ly = 0
+  const down = (e: PointerEvent): void => {
+    dragging = e.pointerId
+    lx = e.clientX
+    ly = e.clientY
+    canvas.setPointerCapture(e.pointerId)
+  }
+  const move = (e: PointerEvent): void => {
+    if (e.pointerId !== dragging) return
+    const before = rig.mode
+    rig.rotate((e.clientX - lx) * RAD_PER_PX, (e.clientY - ly) * RAD_PER_PX)
+    lx = e.clientX
+    ly = e.clientY
+    if (rig.mode !== before) onMode(rig.mode)
+  }
+  const up = (e: PointerEvent): void => {
+    if (e.pointerId !== dragging) return
+    dragging = -1
+    if (canvas.hasPointerCapture(e.pointerId)) canvas.releasePointerCapture(e.pointerId)
+  }
+  const wheel = (e: WheelEvent): void => {
+    e.preventDefault()
+    // Pixel/line/page deltas → a smooth exponential zoom.
+    const px = e.deltaMode === 1 ? e.deltaY * 16 : e.deltaMode === 2 ? e.deltaY * 400 : e.deltaY
+    rig.zoom(Math.exp(Math.max(-200, Math.min(200, px)) * 0.0015))
+  }
+  const dbl = (): void => rig.resetLook()
+  canvas.addEventListener('pointerdown', down)
+  canvas.addEventListener('pointermove', move)
+  canvas.addEventListener('pointerup', up)
+  canvas.addEventListener('pointercancel', up)
+  canvas.addEventListener('wheel', wheel, { passive: false })
+  canvas.addEventListener('dblclick', dbl)
+  canvas.addEventListener('contextmenu', ctxMenu)
+  canvas.style.touchAction = 'none'
+  return () => {
+    canvas.removeEventListener('pointerdown', down)
+    canvas.removeEventListener('pointermove', move)
+    canvas.removeEventListener('pointerup', up)
+    canvas.removeEventListener('pointercancel', up)
+    canvas.removeEventListener('wheel', wheel)
+    canvas.removeEventListener('dblclick', dbl)
+    canvas.removeEventListener('contextmenu', ctxMenu)
+  }
+}
 
 export const telemetryPlugin = (): P => ({
   id: 'telemetry',

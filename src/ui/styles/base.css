@@ -33,7 +33,8 @@ body {
   position: fixed;
   inset: 0;
   pointer-events: none;
-  & > * {
+  /* Screens/panels are interactive; the full-screen HUD lets the mouse reach the canvas. */
+  & > :not(.k-hud) {
     pointer-events: auto;
   }
 }

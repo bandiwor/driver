@@ -27,6 +27,16 @@ const DEG = Math.PI / 180
 const AUTO_SHIFT_COOLDOWN = 0.7
 /** Hold brake at standstill this long to select reverse (automatic), s. */
 const REVERSE_HOLD = 0.25
+/** Manual gear lever travel time (box in neutral meanwhile), s. */
+const LEVER_TIME = 0.12
+/** How long the "gears grinding" feedback stays on, s. */
+const GRIND_TIME = 0.7
+
+/**
+ * Clutch pedal → engagement. Free play at both ends, bite zone in between
+ * (0 = pedal released = fully engaged).
+ */
+export const clutchEngagement = (pedal: number): number => 1 - smoothstep(0.2, 0.8, pedal)
 
 export interface VehicleTelemetry {
   speedKmh: number
@@ -36,6 +46,13 @@ export interface VehicleTelemetry {
   load: number
   damage: number
   limiter: boolean
+  /** Engine running (false = stalled). */
+  running: boolean
+  /** Clutch engagement 0..1 (1 = fully engaged). */
+  clutch: number
+  automatic: boolean
+  /** Gear change refused (clutch not pressed / wrong direction). */
+  grind: boolean
 }
 
 export class Vehicle {
@@ -57,6 +74,7 @@ export class Vehicle {
   readonly #shellSpring0: Float64Array
   #autoCooldown = 0
   #reverseHold = 0
+  #grind = 0
 
   constructor(def: VehicleDef, spawn: readonly [number, number, number] = [0, 0, 0], ground: Ground = new FlatGround(0)) {
     this.def = def
@@ -182,9 +200,35 @@ export class Vehicle {
     }
   }
 
-  shift(delta: 1 | -1): void {
+  /** Raw gear change used by the automatic gearbox. */
+  #autoGear(delta: 1 | -1): void {
     shift(this.gearboxSpec, this.gearbox, delta)
     this.#autoCooldown = AUTO_SHIFT_COOLDOWN
+  }
+
+  /**
+   * Driver's gear lever (sequential). Automatic: ignored. Manual: a gear can
+   * only be engaged with the clutch disengaged (else it grinds and stays in
+   * the current gear); neutral is always reachable; reverse needs ~standstill.
+   * Returns whether the gear changed.
+   */
+  shift(delta: 1 | -1): boolean {
+    if (this.automatic) return false
+    const gb = this.gearbox
+    const target = gb.gear + delta
+    if (target < -1 || target > this.gearboxSpec.ratios.length) return false
+    if (target !== 0) {
+      const v = this.forwardSpeed()
+      const clutchFree = this.chassis.input.clutch < 0.3
+      const wrongWay = (target === -1 && v > 1) || (target > 0 && v < -1)
+      if (!clutchFree || wrongWay) {
+        this.#grind = GRIND_TIME
+        return false
+      }
+    }
+    gb.gear = target
+    gb.shiftTimer = target === 0 ? 0 : LEVER_TIME
+    return true
   }
 
   /** Signed speed along the body's forward axis, m/s. */
@@ -204,6 +248,7 @@ export class Vehicle {
     const gb = this.gearbox
     if (gb.shiftTimer > 0) gb.shiftTimer = Math.max(0, gb.shiftTimer - dt)
     if (this.#autoCooldown > 0) this.#autoCooldown -= dt
+    if (this.#grind > 0) this.#grind -= dt
 
     let throttle = c.throttle
     let brake = c.brake
@@ -232,14 +277,23 @@ export class Vehicle {
       this.#autoShift(throttle)
     }
 
-    // Auto clutch: engages as revs rise above idle (launch), opens near idle
-    // so the engine never stalls; driver pedal overrides.
-    const idle = this.engineSpec.idleRpm
-    const lo = idle * 1.02 + 500 * throttle
-    const launch = smoothstep(lo, lo + 900, engineRpm(this.engine))
-    const locked = this.wheelRpm() > idle * 1.25 ? 1 : 0
     const ch = this.chassis
-    ch.input.clutch = Math.max(launch, locked) * (1 - clamp(c.clutch, 0, 1))
+    const pedal = clutchEngagement(clamp(c.clutch, 0, 1))
+    if (this.automatic) {
+      // Automatic: a slipping coupling (torque-converter-like) that takes up
+      // drive as revs rise above idle and lets go near idle — it cannot stall
+      // the engine; the clutch pedal still overrides.
+      const idle = this.engineSpec.idleRpm
+      const lo = idle * 1.02 + 500 * throttle
+      const launch = this.engine.running ? smoothstep(lo, lo + 900, engineRpm(this.engine)) : 0
+      const locked = this.engine.running && this.wheelRpm() > idle * 1.25 ? 1 : 0
+      ch.input.clutch = Math.max(launch, locked) * pedal
+    } else {
+      // Manual: the pedal is the only thing between engine and wheels.
+      ch.input.clutch = pedal
+    }
+    ch.input.cutThrottle = this.automatic
+    ch.input.starter = c.starter
     ch.input.throttle = throttle
     ch.input.brake = brake
     ch.input.handbrake = c.handbrake
@@ -260,11 +314,11 @@ export class Vehicle {
     const red = this.engineSpec.redlineRpm
     const up = 3000 + (red * 0.97 - 3000) * throttle
     const down = 1400 + 1800 * throttle
-    if (rpm > up && gb.gear < this.gearboxSpec.ratios.length) this.shift(1)
+    if (rpm > up && gb.gear < this.gearboxSpec.ratios.length) this.#autoGear(1)
     else if (rpm < down && gb.gear > 1) {
       // Only downshift if the lower gear will not over-rev.
       const next = (rpm * gearRatio(this.gearboxSpec, gb.gear - 1)) / gearRatio(this.gearboxSpec, gb.gear)
-      if (next < red * 0.9) this.shift(-1)
+      if (next < red * 0.9) this.#autoGear(-1)
     }
   }
 
@@ -279,6 +333,7 @@ export class Vehicle {
     Object.assign(this.engine, newEngineState(this.engineSpec))
     Object.assign(this.gearbox, newGearboxState())
     this.gearbox.gear = this.automatic ? 1 : 0
+    this.#grind = 0
     this.chassis.reset()
     // Re-apply body stiffness (resetBody does not touch spring rates).
     this.#applyParam('body.stiffness', this.params.get('body.stiffness'))
@@ -293,6 +348,10 @@ export class Vehicle {
     out.load = this.engine.load
     out.damage = damage(this.vb.body)
     out.limiter = this.engine.limiterCut
+    out.running = this.engine.running
+    out.clutch = this.chassis.input.clutch
+    out.automatic = this.automatic
+    out.grind = this.#grind > 0
     return out
   }
 
@@ -315,4 +374,8 @@ export const newTelemetry = (): VehicleTelemetry => ({
   load: 0,
   damage: 0,
   limiter: false,
+  running: true,
+  clutch: 1,
+  automatic: true,
+  grind: false,
 })

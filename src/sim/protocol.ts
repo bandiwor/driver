@@ -64,6 +64,7 @@ export const writeControls = (f: Float32Array, c: DriverControls): void => {
   f[2] = c.steer
   f[3] = c.handbrake
   f[4] = c.clutch
+  f[5] = c.starter
 }
 
 export const readControls = (f: Float32Array, c: DriverControls): void => {
@@ -72,6 +73,7 @@ export const readControls = (f: Float32Array, c: DriverControls): void => {
   c.steer = f[2]!
   c.handbrake = f[3]!
   c.clutch = f[4]!
+  c.starter = f[5]!
 }
 
 /** Absolute wall time comparable across threads (performance.now origins differ). */

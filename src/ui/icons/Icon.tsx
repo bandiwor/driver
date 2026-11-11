@@ -28,6 +28,10 @@ export const ICONS = {
   keyboard: 'M3 7h18v10H3zM6.5 10.5h1M10.5 10.5h1M14.5 10.5h1M8 14h8',
   bug: 'M9 8V6.5a3 3 0 0 1 6 0V8M7 10h10v4a5 5 0 0 1-10 0zM3 12h4M17 12h4M4.5 7.5L7 9.5M19.5 7.5L17 9.5M4.5 18l2.7-2M19.5 18l-2.7-2',
   exit: 'M10 4H5v16h5M14 8l4 4-4 4M18 12H9',
+  key: 'M8 10.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7zM10.6 11.6L19 4.5M15.5 7.5l2 2M17.5 5.8l1.8 1.8',
+  gearbox: 'M6 5v14M12 5v14M18 5v7M6 12h12M6 5.01M12 5.01M18 5.01',
+  pedal: 'M8 3h8l-1 11H9zM7 21h10M12 14v7',
+  warning: 'M12 3.5l9.5 16.5h-19zM12 10v4.5M12 17.5v.01',
 } as const
 
 export type IconName = keyof typeof ICONS

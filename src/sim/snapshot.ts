@@ -26,7 +26,11 @@ export const S = {
   physicsMs: 7,
   stepsPerSec: 8,
   frame: 9, // 12 floats: p, f, u, v
-  count: 24,
+  running: 21,
+  clutch: 22,
+  automatic: 23,
+  grind: 24,
+  count: 28,
 } as const
 
 const FRAME_KEYS = ['px', 'py', 'pz', 'fx', 'fy', 'fz', 'ux', 'uy', 'uz', 'vx', 'vy', 'vz'] as const satisfies readonly (keyof BodyFrame)[]
@@ -105,6 +109,10 @@ export class SnapshotSlot {
     s[S.limiter] = tel.limiter ? 1 : 0
     s[S.physicsMs] = sim.physicsMs
     s[S.stepsPerSec] = stepsPerSec
+    s[S.running] = tel.running ? 1 : 0
+    s[S.clutch] = tel.clutch
+    s[S.automatic] = tel.automatic ? 1 : 0
+    s[S.grind] = tel.grind ? 1 : 0
     const f = v.frame
     for (let i = 0; i < 12; i++) s[S.frame + i] = f[FRAME_KEYS[i]!]
     this.pos.set(v.body.pos)
@@ -141,6 +149,10 @@ export class SnapshotSlot {
     tel.load = s[S.load]!
     tel.damage = s[S.damage]!
     tel.limiter = s[S.limiter]! > 0.5
+    tel.running = s[S.running]! > 0.5
+    tel.clutch = s[S.clutch]!
+    tel.automatic = s[S.automatic]! > 0.5
+    tel.grind = s[S.grind]! > 0.5
     const f = v.frame
     for (let i = 0; i < 12; i++) f[FRAME_KEYS[i]!] = s[S.frame + i]!
     v.body.pos.set(this.pos)

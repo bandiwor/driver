@@ -241,7 +241,7 @@ export class WorkerHost extends HostBase implements PhysicsHost {
       return
     }
     // Transfer transport: send only on change (cheap dedupe key).
-    const key = `${c.throttle},${c.brake},${c.steer},${c.handbrake},${c.clutch}`
+    const key = `${c.throttle},${c.brake},${c.steer},${c.handbrake},${c.clutch},${c.starter}`
     if (key === this.#lastControls) return
     this.#lastControls = key
     this.#post({ type: 'controls', c: { ...c } })

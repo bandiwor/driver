@@ -12,6 +12,7 @@ export type Action =
   | 'steerRight'
   | 'handbrake'
   | 'clutch'
+  | 'ignition'
   | 'shiftUp'
   | 'shiftDown'
   | 'camera'
@@ -28,7 +29,8 @@ export const defaultBindings: Bindings = {
   steerLeft: ['KeyA', 'ArrowLeft'],
   steerRight: ['KeyD', 'ArrowRight'],
   handbrake: ['Space'],
-  clutch: ['ShiftLeft'],
+  clutch: ['ShiftLeft', 'ShiftRight'],
+  ignition: ['KeyI'],
   shiftUp: ['KeyE'],
   shiftDown: ['KeyQ'],
   camera: ['KeyC'],
@@ -44,20 +46,31 @@ export interface DriverControls {
   steer: number // -1 (left) .. 1 (right)
   handbrake: number
   clutch: number // 1 = pedal pressed (disengaged)
+  starter: number // 1 = cranking (ignition key held)
 }
 
 export interface InputTuning {
   steerSpeed: number // full-lock per second
   steerReturn: number
   pedalSpeed: number
+  /** Clutch pedal: pressing is quick, releasing is a controllable slow travel (per second). */
+  clutchPress: number
+  clutchRelease: number
   /** Reduce steering lock with speed (keyboard assist), 0..1. */
   speedSensitivity: number
 }
 
-export const defaultInputTuning: InputTuning = { steerSpeed: 2.6, steerReturn: 4, pedalSpeed: 6, speedSensitivity: 0.6 }
+export const defaultInputTuning: InputTuning = {
+  steerSpeed: 2.6,
+  steerReturn: 4,
+  pedalSpeed: 6,
+  clutchPress: 8,
+  clutchRelease: 1.1,
+  speedSensitivity: 0.6,
+}
 
 export class InputMapper {
-  readonly controls: DriverControls = { throttle: 0, brake: 0, steer: 0, handbrake: 0, clutch: 0 }
+  readonly controls: DriverControls = { throttle: 0, brake: 0, steer: 0, handbrake: 0, clutch: 0, starter: 0 }
   readonly #down = new Set<string>()
   readonly #pressed = new Set<Action>()
   readonly #codeToActions = new Map<string, Action[]>()
@@ -106,7 +119,8 @@ export class InputMapper {
     c.throttle = approach(c.throttle, this.held('throttle') ? 1 : 0, p)
     c.brake = approach(c.brake, this.held('brake') ? 1 : 0, p)
     c.handbrake = approach(c.handbrake, this.held('handbrake') ? 1 : 0, p * 2)
-    c.clutch = approach(c.clutch, this.held('clutch') ? 1 : 0, p * 2)
+    c.clutch = this.held('clutch') ? approach(c.clutch, 1, t.clutchPress * dt) : approach(c.clutch, 0, t.clutchRelease * dt)
+    c.starter = this.held('ignition') ? 1 : 0
     const dir = (this.held('steerRight') ? 1 : 0) - (this.held('steerLeft') ? 1 : 0)
     const limit = 1 / (1 + t.speedSensitivity * Math.max(0, speedMs) * 0.05)
     if (dir !== 0) c.steer = approach(c.steer, dir * limit, t.steerSpeed * dt)

@@ -110,6 +110,13 @@ export const sedan: VehicleDef = {
     frictionCoef: 0.025,
     brakingTorque: 45,
     cylinders: 6,
+    stallRpm: 400,
+    crankRpm: 180,
+    pushStartRpm: 650,
+    starterTorque: 110,
+    starterMaxRpm: 320,
+    crankTime: 0.55,
+    idleControlMax: 0.3,
   },
   gearbox: { ratios: [3.6, 2.19, 1.41, 1.0, 0.83, 0.69], reverse: 3.4, finalDrive: 3.73, shiftTime: 0.22, clutchMaxTorque: 600 },
   tyre: {

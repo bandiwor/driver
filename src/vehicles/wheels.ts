@@ -82,12 +82,16 @@ export interface ChassisInput {
   handbrake: number
   /** Clutch engagement 0..1 (auto clutch × pedal). */
   clutch: number
+  /** Starter motor engaged (ignition key held). */
+  starter: number
+  /** Automated gearbox cuts the throttle while a shift is in progress. */
+  cutThrottle: boolean
 }
 
 export class WheelSystem implements SubstepHook {
   readonly wheels: WheelState[]
   readonly setup: ChassisSetup
-  readonly input: ChassisInput = { throttle: 0, brake: 0, handbrake: 0, clutch: 1 }
+  readonly input: ChassisInput = { throttle: 0, brake: 0, handbrake: 0, clutch: 1, starter: 0, cutThrottle: false }
   readonly driveline = newDrivelineState(0)
   readonly wheelbase: number
   readonly nominalLoad: Float64Array
@@ -388,8 +392,8 @@ export class WheelSystem implements SubstepHook {
     // ── 3. driveline (implicit) ────────────────────────────────
     const eng = this.#engine
     const shifting = this.#gb.shiftTimer > 0
-    // Throttle cut while shifting (clean shifts, like an automated gearbox).
-    const te = engineDrive(this.#engineSpec, eng, shifting ? 0 : this.input.throttle)
+    const inp = this.input
+    const te = engineDrive(this.#engineSpec, eng, shifting && inp.cutThrottle ? 0 : inp.throttle, inp.starter, h)
     this.driveline.engineOmega = eng.omega
     solveDriveline(
       {

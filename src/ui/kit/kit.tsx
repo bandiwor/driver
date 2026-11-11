@@ -139,6 +139,33 @@ export function Tabs<T extends string>(p: TabsProps<T>): JSX.Element {
   )
 }
 
+export interface SegmentedProps<T extends string> {
+  label: string
+  options: readonly { id: T; label: string }[]
+  value: T
+  onChange: (id: T) => void
+}
+
+/** Single-choice segmented control (radio group). */
+export function Segmented<T extends string>(p: SegmentedProps<T>): JSX.Element {
+  return (
+    <div class="k-segment" role="radiogroup" aria-label={p.label} style={{ '--k-n': String(p.options.length) }}>
+      {p.options.map((o) => (
+        <button
+          key={o.id}
+          type="button"
+          role="radio"
+          aria-checked={p.value === o.id}
+          class={p.value === o.id ? 'is-active' : ''}
+          onClick={() => p.onChange(o.id)}
+        >
+          {o.label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
 export interface PanelProps {
   title?: string
   icon?: IconName

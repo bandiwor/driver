@@ -4,7 +4,7 @@ import { useEffect, useState } from 'preact/hooks'
 import { createGame, type PhysicsMode } from '../app/game.ts'
 import { WebAudio, type AudioService } from '../audio/audio.ts'
 import { getVehicle } from '../vehicles/registry.ts'
-import { bindGame, paused, screen, tuningOpen, volume, type GameBridge } from './store.ts'
+import { bindGame, paused, screen, transmission, tuningOpen, volume, type GameBridge, type Transmission } from './store.ts'
 import { MainMenu } from './screens/MainMenu.tsx'
 import { Hud } from './screens/Hud.tsx'
 import { TuningPanel } from './screens/TuningPanel.tsx'
@@ -44,7 +44,12 @@ export function App({ canvas, vehicleId, physics }: AppProps): JSX.Element {
     canvas.focus()
   }
 
-  if (screen.value === 'menu' || !bridge) return <MainMenu onStart={() => void start()} loading={loading} />
+  const setTransmission = (t: Transmission): void => {
+    if (bridge) bridge.setTransmission(t)
+    else transmission.value = t
+  }
+
+  if (screen.value === 'menu' || !bridge) return <MainMenu onStart={() => void start()} onTransmission={setTransmission} loading={loading} />
 
   return (
     <>
@@ -71,6 +76,7 @@ export function App({ canvas, vehicleId, physics }: AppProps): JSX.Element {
           }}
           onCamera={(m) => bridge.setCamera(m)}
           onBeams={(on) => bridge.setBeams(on)}
+          onTransmission={setTransmission}
         />
       )}
     </>

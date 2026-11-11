@@ -58,6 +58,8 @@ describe.each<Transport>(['shared', 'transfer'])('WorkerHost (%s)', (transport) 
   it('forwards commands and tuning params to the worker', async () => {
     const { host, server } = await connect(transport)
     host.vehicle.params.set('gear.auto', 0) // manual, still in 1st (auto start gear)
+    host.setControls({ ...newControls(), clutch: 1 })
+    await host.step(40) // clutch pedal down → disengaged
     host.command({ type: 'shift', delta: 1 })
     host.vehicle.params.set('engine.limiter', 5000)
     await host.step(1)

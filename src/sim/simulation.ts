@@ -30,7 +30,7 @@ export type SimCommand =
   | { type: 'param'; id: string; value: number }
   | { type: 'kick'; node: number; v: readonly [number, number, number] }
 
-export const newControls = (): DriverControls => ({ throttle: 0, brake: 0, steer: 0, handbrake: 0, clutch: 0 })
+export const newControls = (): DriverControls => ({ throttle: 0, brake: 0, steer: 0, handbrake: 0, clutch: 0, starter: 0 })
 
 export const copyControls = (src: DriverControls, dst: DriverControls): void => {
   dst.throttle = src.throttle
@@ -38,6 +38,7 @@ export const copyControls = (src: DriverControls, dst: DriverControls): void => 
   dst.steer = src.steer
   dst.handbrake = src.handbrake
   dst.clutch = src.clutch
+  dst.starter = src.starter
 }
 
 export class Simulation {

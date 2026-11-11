@@ -4,18 +4,48 @@ import { Icon, type IconName } from '../icons/Icon.tsx'
 import { cameraMode, damagePct, debugOverlay, tel } from '../store.ts'
 import type { CameraMode } from '../../render/cameraRig.ts'
 
-const CAM: Readonly<Record<CameraMode, { icon: IconName; label: string }>> = {
+export const CAMERA_LABELS: Readonly<Record<CameraMode, { icon: IconName; label: string }>> = {
   chase: { icon: 'car', label: 'Сзади' },
   cockpit: { icon: 'eye', label: 'Салон' },
   top: { icon: 'top', label: 'Сверху' },
-  orbit: { icon: 'camera', label: 'Орбита' },
+  free: { icon: 'camera', label: 'Свободная' },
+}
+
+/** Vertical clutch engagement meter (manual): full = engaged, empty = pedal down. */
+function ClutchMeter({ engagement }: { engagement: number }): JSX.Element {
+  return (
+    <span class="k-chip" title="Сцепление: заполнено — сцеплено, пусто — выжато">
+      <Icon name="pedal" size={16} />
+      <span class="k-meter" role="meter" aria-label="Сцепление" aria-valuenow={Math.round(engagement * 100)} aria-valuemin={0} aria-valuemax={100}>
+        <span class="k-meter__fill" style={{ transform: `scaleX(${engagement})` }} />
+      </span>
+      <Kbd>Shift</Kbd>
+    </span>
+  )
 }
 
 export function Hud({ redline, maxRpm }: { redline: number; maxRpm: number }): JSX.Element {
-  const cam = CAM[cameraMode.value]
+  const cam = CAMERA_LABELS[cameraMode.value]
   const dmg = damagePct.value
+  const manual = !tel.automatic.value
   return (
     <div class="k-hud">
+      {(!tel.running.value || tel.grind.value) && (
+        <div class="k-alerts" role="status">
+          {!tel.running.value && (
+            <span class="k-alert k-alert--danger">
+              <Icon name="key" size={18} />
+              Двигатель заглох — удерживайте <Kbd>I</Kbd>
+            </span>
+          )}
+          {tel.grind.value && (
+            <span class="k-alert k-alert--warn">
+              <Icon name="warning" size={18} />
+              Скрежет: выжмите сцепление <Kbd>Shift</Kbd>
+            </span>
+          )}
+        </div>
+      )}
       <div class="k-hud__cluster">
         <Gauge
           value={tel.rpm.value}
@@ -23,7 +53,7 @@ export function Hud({ redline, maxRpm }: { redline: number; maxRpm: number }): J
           redline={redline}
           label="Обороты"
           center={tel.gear.value}
-          sub={`${tel.rpm.value} RPM`}
+          sub={`${manual ? 'МКПП' : 'АКПП'} · ${tel.rpm.value}`}
           size={170}
         />
         <div class="k-hud__speed">
@@ -37,6 +67,7 @@ export function Hud({ redline, maxRpm }: { redline: number; maxRpm: number }): J
           {cam.label}
           <Kbd>C</Kbd>
         </span>
+        {manual && <ClutchMeter engagement={tel.clutch.value} />}
         <span class={`k-chip ${dmg > 30 ? 'k-chip--danger' : dmg > 5 ? 'k-chip--warn' : ''}`}>
           <Icon name="body" size={16} />
           {dmg.toFixed(0)}%

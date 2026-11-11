@@ -253,6 +253,33 @@
   color: var(--k-fg-0);
 }
 
+/* ---------- Segmented ---------- */
+.k-segment {
+  display: grid;
+  grid-template-columns: repeat(var(--k-n, 2), 1fr);
+  gap: 2px;
+  margin: var(--k-s2) 0;
+  padding: 2px;
+  border-radius: var(--k-radius);
+  background: var(--k-bg-0);
+  & button {
+    height: 30px;
+    border: 0;
+    border-radius: var(--k-radius-sm);
+    background: none;
+    color: var(--k-fg-2);
+    font: 600 var(--k-fs-sm) var(--k-font);
+    cursor: pointer;
+    &:hover {
+      color: var(--k-fg-0);
+    }
+    &.is-active {
+      background: var(--k-bg-3);
+      color: var(--k-fg-0);
+    }
+  }
+}
+
 /* ---------- Panel ---------- */
 .k-panel {
   display: flex;

@@ -32,6 +32,35 @@ describe('engine', () => {
     expect(maxRpm).toBeGreaterThan(spec.limiterRpm - 50)
     expect(maxRpm).toBeLessThan(spec.limiterRpm + 300)
   })
+  it('stalls below stallRpm when it cannot keep turning (heavy load)', () => {
+    const s = newEngineState(spec)
+    for (let i = 0; i < 2000 && s.running; i++) stepEngine(spec, s, 0, 400, 1 / 1000)
+    expect(s.running).toBe(false)
+    for (let i = 0; i < 3000; i++) stepEngine(spec, s, 1, 0, 1 / 1000)
+    expect(engineRpm(s)).toBeLessThan(5) // no combustion: throttle does nothing
+  })
+  it('starter cranks, the engine catches after crankTime and settles at idle', () => {
+    const s = { ...newEngineState(spec), omega: 0, running: false }
+    let caughtAt = -1
+    for (let i = 0; i < 1500; i++) {
+      stepEngine(spec, s, 0, 0, 1 / 1000, 1)
+      if (s.running && caughtAt < 0) caughtAt = i / 1000
+    }
+    expect(caughtAt).toBeGreaterThan(spec.crankTime)
+    expect(caughtAt).toBeLessThan(spec.crankTime + 0.3)
+    for (let i = 0; i < 2000; i++) stepEngine(spec, s, 0, 0, 1 / 1000, 0)
+    expect(s.running).toBe(true)
+    expect(engineRpm(s)).toBeGreaterThan(spec.idleRpm * 0.9)
+  })
+  it('a short tap on the starter is not enough; push-start above pushStartRpm is', () => {
+    const s = { ...newEngineState(spec), omega: 0, running: false }
+    for (let i = 0; i < 150; i++) stepEngine(spec, s, 0, 0, 1 / 1000, 1)
+    for (let i = 0; i < 1000; i++) stepEngine(spec, s, 0, 0, 1 / 1000, 0)
+    expect(s.running).toBe(false)
+    s.omega = ((spec.pushStartRpm + 50) * Math.PI) / 30
+    stepEngine(spec, s, 0, 0, 1 / 1000)
+    expect(s.running).toBe(true)
+  })
   it('has plausible peak power', () => {
     expect(powerKw(spec, 5500)).toBeGreaterThan(120)
   })
