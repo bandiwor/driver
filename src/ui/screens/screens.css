@@ -1,0 +1,222 @@
+/* ---------- Main menu ---------- */
+.k-menu {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: var(--k-s6);
+  padding: var(--k-s7);
+  background:
+    radial-gradient(1200px 600px at 80% 20%, rgb(255 176 32 / 0.08), transparent 60%),
+    linear-gradient(180deg, rgb(13 15 18 / 0.55), var(--k-bg-0) 85%);
+  @media (--k-narrow) {
+    padding: var(--k-s4);
+  }
+}
+.k-menu__brand {
+  display: flex;
+  align-items: center;
+  gap: var(--k-s4);
+  color: var(--k-accent);
+}
+.k-logo {
+  width: 72px;
+  height: 72px;
+}
+.k-menu__title {
+  margin: 0;
+  font-size: var(--k-fs-hero);
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  color: var(--k-fg-0);
+  line-height: 1;
+}
+.k-menu__tag {
+  margin: var(--k-s2) 0 0;
+  color: var(--k-fg-2);
+  letter-spacing: 0.04em;
+}
+.k-menu__grid {
+  display: grid;
+  grid-template-columns: minmax(280px, 380px) minmax(280px, 380px);
+  gap: var(--k-s4);
+  align-items: start;
+  @media (--k-narrow) {
+    grid-template-columns: 1fr;
+  }
+  & .k-btn--lg {
+    width: 100%;
+    margin-top: var(--k-s4);
+  }
+}
+.k-menu__car {
+  margin: 0;
+  font-size: var(--k-fs-lg);
+  font-weight: 700;
+}
+.k-muted {
+  margin: var(--k-s1) 0 0;
+  color: var(--k-fg-2);
+  font-size: var(--k-fs-sm);
+}
+
+/* ---------- Controls list ---------- */
+.k-controls {
+  display: grid;
+  gap: var(--k-s2);
+  margin: 0;
+}
+.k-controls__row {
+  display: grid;
+  grid-template-columns: 120px 1fr;
+  align-items: center;
+  & dt,
+  & dd {
+    margin: 0;
+  }
+  & dd {
+    color: var(--k-fg-1);
+    font-size: var(--k-fs-sm);
+  }
+}
+
+/* ---------- HUD ---------- */
+.k-hud {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.k-hud__cluster {
+  position: absolute;
+  right: var(--k-s5);
+  bottom: var(--k-s5);
+  display: flex;
+  align-items: flex-end;
+  gap: var(--k-s3);
+  padding: var(--k-s3);
+  border-radius: var(--k-radius-lg);
+  background: var(--k-hud-bg);
+}
+.k-hud__speed {
+  display: grid;
+  justify-items: end;
+  min-width: 112px;
+  padding-bottom: var(--k-s3);
+}
+.k-hud__speed-value {
+  font: 800 var(--k-fs-hero) / 1 var(--k-mono);
+  font-variant-numeric: tabular-nums;
+}
+.k-hud__speed-unit {
+  color: var(--k-fg-2);
+  font-size: var(--k-fs-sm);
+  letter-spacing: 0.08em;
+}
+.k-hud__chips {
+  position: absolute;
+  left: var(--k-s5);
+  bottom: var(--k-s5);
+  display: flex;
+  gap: var(--k-s2);
+}
+.k-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--k-s2);
+  height: 32px;
+  padding: 0 var(--k-s3);
+  border-radius: 16px;
+  background: var(--k-hud-bg);
+  color: var(--k-fg-1);
+  font: 600 var(--k-fs-sm) var(--k-font);
+  font-variant-numeric: tabular-nums;
+}
+.k-chip--warn {
+  color: var(--k-warn);
+}
+.k-chip--danger {
+  color: var(--k-danger);
+}
+.k-debug {
+  position: absolute;
+  top: var(--k-s4);
+  left: var(--k-s4);
+  margin: 0;
+  padding: var(--k-s3);
+  border-radius: var(--k-radius);
+  background: var(--k-hud-bg);
+  color: var(--k-ok);
+  font: 12px / 1.5 var(--k-mono);
+}
+
+/* ---------- Tuning ---------- */
+.k-tuning {
+  position: absolute;
+  top: var(--k-s4);
+  right: var(--k-s4);
+  bottom: 220px;
+  width: min(380px, calc(100vw - 2 * var(--k-s4)));
+  & .k-panel__body {
+    display: flex;
+    flex-direction: column;
+    gap: var(--k-s3);
+  }
+}
+.k-tuning__list {
+  display: grid;
+}
+
+/* ---------- Pause ---------- */
+.k-scrim {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: var(--k-s4);
+  background: var(--k-scrim);
+  backdrop-filter: blur(6px);
+}
+.k-pause {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(240px, 320px));
+  gap: var(--k-s4);
+  align-items: start;
+  @media (--k-narrow) {
+    grid-template-columns: 1fr;
+    max-height: 100%;
+    overflow-y: auto;
+  }
+}
+.k-stack {
+  display: grid;
+  gap: var(--k-s2);
+  & .k-btn {
+    justify-content: flex-start;
+  }
+}
+.k-segment {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 2px;
+  margin: var(--k-s2) 0;
+  padding: 2px;
+  border-radius: var(--k-radius);
+  background: var(--k-bg-0);
+  & button {
+    height: 30px;
+    border: 0;
+    border-radius: var(--k-radius-sm);
+    background: none;
+    color: var(--k-fg-2);
+    font: 600 var(--k-fs-xs) var(--k-font);
+    cursor: pointer;
+    &:hover {
+      color: var(--k-fg-0);
+    }
+    &.is-active {
+      background: var(--k-bg-3);
+      color: var(--k-fg-0);
+    }
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["typescript", "unicorn", "oxc", "import"],
+  "categories": { "correctness": "error", "suspicious": "warn", "perf": "warn" },
+  "rules": {
+    "typescript/no-explicit-any": "error",
+    "typescript/no-non-null-assertion": "off",
+    "no-console": ["warn", { "allow": ["warn", "error", "info"] }],
+    "import/no-cycle": "error",
+    "import/default": "off",
+    "import/no-unassigned-import": ["warn", { "allow": ["**/*.css"] }],
+    "no-await-in-loop": "off",
+    "no-underscore-dangle": "off",
+    "unicorn/no-array-sort": "off"
+  },
+  "ignorePatterns": ["dist", "node_modules", "snapshots"]
+}

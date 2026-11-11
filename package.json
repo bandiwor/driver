@@ -1,0 +1,36 @@
+{
+  "name": "kuzov",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Kuzov — browser soft-body driving sandbox",
+  "type": "module",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "dev": "vite",
+    "build": "npm run typecheck && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "oxlint -c .oxlintrc.json src scripts tests",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "perf": "PERF=1 vitest run perf",
+    "snap": "node scripts/snap.mjs",
+    "e2e": "node scripts/e2e.mjs",
+    "check": "npm run typecheck && npm run lint && npm run test"
+  },
+  "dependencies": {
+    "@preact/signals": "^2.11.4",
+    "preact": "^11.2.0",
+    "three": "^0.187.0"
+  },
+  "devDependencies": {
+    "@types/three": "^0.187.0",
+    "happy-dom": "^21.0.4",
+    "lightningcss": "^1.33.0",
+    "oxlint": "^1.93.0",
+    "playwright": "1.63.0",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.8",
+    "vitest": "^5.1.0"
+  }
+}

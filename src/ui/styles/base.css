@@ -1,0 +1,48 @@
+@import './tokens.css';
+@import '../kit/kit.css';
+@import '../screens/screens.css';
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: var(--k-bg-0);
+  color: var(--k-fg-0);
+  font: 400 var(--k-fs-md) / 1.4 var(--k-font);
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+}
+
+#viewport {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  display: block;
+  outline: none;
+}
+
+#ui {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  & > * {
+    pointer-events: auto;
+  }
+}
+
+html[data-snap] #ui {
+  display: none;
+}
+
+:focus-visible {
+  outline: none;
+  box-shadow: var(--k-focus);
+}
