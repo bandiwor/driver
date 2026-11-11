@@ -30,7 +30,10 @@ export function App({ canvas, vehicleId, physics }: AppProps): JSX.Element {
       return
     }
     setLoading(true)
-    await audio.init().catch((e: unknown) => console.warn('Audio unavailable', e))
+    // Never let audio block the game: give it a few seconds, then go silent.
+    await Promise.race([audio.init(), new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 3000))]).catch(
+      (e: unknown) => console.warn('Audio unavailable', e),
+    )
     audio.setMasterVolume(volume.value)
     const game = await createGame({ canvas, vehicleId, audio, physics })
     const b = bindGame(game)

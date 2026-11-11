@@ -99,6 +99,20 @@ await step('tuning panel', async () => {
   await page.getByRole('tab', { name: 'Двигатель' }).click()
   await shot('tuning')
   await page.keyboard.press('KeyT')
+  await page.locator('.k-tuning').waitFor({ state: 'detached' })
+})
+await step('drive keys work after touching a tuning slider (focus regression)', async () => {
+  await page.keyboard.press('KeyT')
+  await page.locator('.k-tuning').waitFor()
+  await page.locator('.k-tuning .k-slider__input').first().click()
+  await page.keyboard.press('KeyT') // must close the panel even with the slider focused
+  await page.locator('.k-tuning').waitFor({ state: 'detached' })
+  await page.keyboard.press('KeyR')
+  await page.keyboard.down('KeyW')
+  await page.waitForTimeout(2000)
+  const kmh = Number(await page.locator('.k-hud__speed-value').textContent())
+  await page.keyboard.up('KeyW')
+  if (!(kmh > 10)) throw new Error(`car does not drive after using a slider: ${kmh} km/h`)
 })
 await step('pause menu', async () => {
   await page.keyboard.press('Escape')

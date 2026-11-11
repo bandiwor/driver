@@ -20,6 +20,15 @@ import { T, type GameEvents, type Telemetry } from './tokens.ts'
 
 type P = Plugin<GameEvents>
 
+const NON_TEXT_INPUTS = new Set(['range', 'checkbox', 'radio', 'button', 'submit', 'reset', 'color'])
+
+/** Only real text entry keeps keys away from the game (sliders/toggles/buttons don't). */
+export const isTextField = (t: EventTarget | null): boolean =>
+  t instanceof HTMLTextAreaElement ||
+  t instanceof HTMLSelectElement ||
+  (t instanceof HTMLInputElement && !NON_TEXT_INPUTS.has(t.type)) ||
+  (t instanceof HTMLElement && t.isContentEditable)
+
 export const simPlugin = (host: PhysicsHost): P => ({
   id: 'sim',
   setup(ctx) {
@@ -59,10 +68,18 @@ export const inputPlugin = (target: Window): P => ({
     const host = ctx.get(T.sim)
     ctx.provide(T.input, input)
     const down = (e: KeyboardEvent): void => {
-      if (e.target instanceof HTMLInputElement) return
-      if (input.keyDown(e.code)) e.preventDefault()
+      if (isTextField(e.target)) return
+      if (!input.keyDown(e.code)) return
+      // Game keys win over focused UI controls: no slider moves on arrows,
+      // no button "clicks" on Space; focus goes back to the game.
+      e.preventDefault()
+      const el = document.activeElement
+      if (el instanceof HTMLElement && el !== document.body && el.tagName !== 'CANVAS') el.blur()
     }
-    const up = (e: KeyboardEvent): void => void input.keyUp(e.code)
+    const up = (e: KeyboardEvent): void => {
+      // Always release, even inside a text field, so no key gets stuck.
+      if (input.keyUp(e.code) && !isTextField(e.target)) e.preventDefault()
+    }
     const blur = (): void => input.clear()
     target.addEventListener('keydown', down)
     target.addEventListener('keyup', up)

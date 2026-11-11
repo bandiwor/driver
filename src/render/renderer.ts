@@ -33,7 +33,7 @@ export class RenderService {
       preserveDrawingBuffer: this.#snapshot,
     })
     this.renderer.shadowMap.enabled = true
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap
+    this.renderer.shadowMap.type = THREE.PCFShadowMap
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping
     this.renderer.toneMappingExposure = 1.0
     this.env = createEnvironment(this.scene, this.renderer.capabilities.getMaxAnisotropy())
