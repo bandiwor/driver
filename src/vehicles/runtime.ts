@@ -20,6 +20,7 @@ import { wheelSteerAngle } from '../physics/vehicle/steering.ts'
 import type { DriverControls } from '../input/input.ts'
 import { buildVehicleBody, type VehicleBody } from './build.ts'
 import { WheelSystem, type WheelState } from './wheels.ts'
+import { EnginePipeline } from '../physics/vehicle/powerplant.ts'
 import type { VehicleDef } from './types.ts'
 
 const DEG = Math.PI / 180
@@ -53,6 +54,20 @@ export interface VehicleTelemetry {
   automatic: boolean
   /** Gear change refused (clutch not pressed / wrong direction). */
   grind: boolean
+  /** Turbo: fitted+enabled, boost (bar), shaft speed 0..1. */
+  turbo: boolean
+  boost: number
+  turboSpin: number
+  lambda: number
+  /** Exhaust gas temperature, °C. */
+  egt: number
+  /** Tailpipe smoke amount 0..1 and darkness 0..1. */
+  smoke: number
+  soot: number
+  /** Monotonic event counters (consumers diff them) + last pop strength. */
+  afterfires: number
+  afterfireStrength: number
+  blowOffs: number
 }
 
 export class Vehicle {
@@ -67,6 +82,8 @@ export class Vehicle {
   readonly engine: EngineState
   readonly gearbox: GearboxState = newGearboxState()
   readonly chassis: WheelSystem
+  /** Combustion pipeline (fuel, ignition, exhaust, turbo, … modules). */
+  readonly powerplant: EnginePipeline
   /** Centre of mass in body-local coordinates (frame origin offset). */
   readonly comLocal: readonly [number, number, number]
   automatic: boolean
@@ -86,13 +103,14 @@ export class Vehicle {
     this.engineSpec = { ...def.engine }
     this.gearboxSpec = { ...def.gearbox }
     this.engine = newEngineState(this.engineSpec)
+    this.powerplant = new EnginePipeline(def.powerplant)
     // Wheel system is built at the design pose (static loads, strut lengths).
     this.chassis = new WheelSystem(
       def,
       this.vb,
       this.frame,
       ground,
-      { spec: this.engineSpec, state: this.engine },
+      { spec: this.engineSpec, state: this.engine, pipeline: this.powerplant },
       { spec: this.gearboxSpec, state: this.gearbox },
     )
     translateBody(this.vb.body, spawn[0], spawn[1], spawn[2])
@@ -197,6 +215,9 @@ export class Vehicle {
         for (let i = 0; i < this.#shellSpring0.length; i++) sp[i] = this.#shellSpring0[i]! * v
         break
       }
+      default:
+        // `<moduleId>.<key>` → engine pipeline module (turbo.boost, fuel.lambda, …).
+        if (!this.powerplant.setParam(id, v)) throw new Error(`Param "${id}" is not handled by ${this.def.id}`)
     }
   }
 
@@ -287,7 +308,10 @@ export class Vehicle {
       const lo = idle * 1.02 + 500 * throttle
       const launch = this.engine.running ? smoothstep(lo, lo + 900, engineRpm(this.engine)) : 0
       const locked = this.engine.running && this.wheelRpm() > idle * 1.25 ? 1 : 0
-      ch.input.clutch = Math.max(launch, locked) * pedal
+      // With the handbrake pulled the converter slips instead of dragging the
+      // rear axle round with the engine (lets the rears lock for a slide).
+      const hb = 1 - smoothstep(0.1, 0.5, c.handbrake)
+      ch.input.clutch = Math.max(launch, locked) * pedal * hb
     } else {
       // Manual: the pedal is the only thing between engine and wheels.
       ch.input.clutch = pedal
@@ -335,6 +359,7 @@ export class Vehicle {
     this.gearbox.gear = this.automatic ? 1 : 0
     this.#grind = 0
     this.chassis.reset()
+    this.powerplant.reset()
     // Re-apply body stiffness (resetBody does not touch spring rates).
     this.#applyParam('body.stiffness', this.params.get('body.stiffness'))
     computeFrame(this.vb.body, this.vb.refs, this.frame)
@@ -352,6 +377,17 @@ export class Vehicle {
     out.clutch = this.chassis.input.clutch
     out.automatic = this.automatic
     out.grind = this.#grind > 0
+    const c = this.powerplant.c
+    out.turbo = this.powerplant.module('turbo')?.enabled ?? false
+    out.boost = c.boost
+    out.turboSpin = c.turboSpin
+    out.lambda = c.lambda
+    out.egt = c.egt
+    out.smoke = c.smoke
+    out.soot = c.soot
+    out.afterfires = c.afterfires
+    out.afterfireStrength = c.lastAfterfire
+    out.blowOffs = c.blowOffs
     return out
   }
 
@@ -378,4 +414,14 @@ export const newTelemetry = (): VehicleTelemetry => ({
   clutch: 1,
   automatic: true,
   grind: false,
+  turbo: false,
+  boost: 0,
+  turboSpin: 0,
+  lambda: 0.88,
+  egt: 300,
+  smoke: 0,
+  soot: 0,
+  afterfires: 0,
+  afterfireStrength: 0,
+  blowOffs: 0,
 })

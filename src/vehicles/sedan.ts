@@ -30,6 +30,17 @@ const params: ParamDef[] = [
   // Двигатель
   { id: 'engine.torqueScale', label: 'Множитель момента', group: 'Двигатель', min: 0.5, max: 2.5, step: 0.05, default: 1 },
   { id: 'engine.limiter', label: 'Отсечка', group: 'Двигатель', min: 5000, max: 9000, step: 50, default: 7000, unit: 'об/мин' },
+  // Топливо и зажигание (модули fuel / ignition / exhaust)
+  { id: 'fuel.lambda', label: 'Смесь (λ)', group: 'Двигатель', min: 0.65, max: 1.25, step: 0.01, default: 0.88, hint: '< 1 богаче: мощнее до 0.88, дальше дым и отстрелы; > 1 беднее: горячо и слабо' },
+  { id: 'fuel.overrun', label: 'Топливо на сбросе', group: 'Двигатель', min: 0, max: 1, step: 0.05, default: 0.15, hint: 'подача при закрытом газе → хлопки в выхлопе' },
+  { id: 'ignition.timing', label: 'Угол зажигания', group: 'Двигатель', min: -20, max: 10, step: 0.5, default: 0, unit: '°', hint: '− позднее: меньше момента, горячее выхлоп' },
+  { id: 'exhaust.pops', label: 'Чувствительность выхлопа', group: 'Двигатель', min: 0, max: 3, step: 0.1, default: 1, hint: 'насколько легко воспламеняется топливо в трубе' },
+  // Турбина (модуль turbo)
+  { id: 'turbo.enabled', label: 'Турбина', group: 'Турбина', min: 0, max: 1, step: 1, default: 0, kind: 'toggle' },
+  { id: 'turbo.boost', label: 'Давление наддува', group: 'Турбина', min: 0.2, max: 2.5, step: 0.05, default: 0.9, unit: 'бар' },
+  { id: 'turbo.size', label: 'Размер турбины', group: 'Турбина', min: 0.5, max: 2.5, step: 0.05, default: 1, hint: 'больше — выше потенциал наддува и больше яма' },
+  { id: 'turbo.blowOff', label: 'Блоу-офф', group: 'Турбина', min: 0, max: 1, step: 1, default: 1, kind: 'toggle' },
+  { id: 'turbo.antiLag', label: 'Антилаг', group: 'Турбина', min: 0, max: 1, step: 1, default: 0, kind: 'toggle' },
   // Шины
   { id: 'tyre.grip', label: 'Сцепление шин', group: 'Шины', min: 0.5, max: 1.6, step: 0.01, default: 1.05, unit: 'μ' },
   { id: 'tyre.front.pressure', label: 'Давление перед', group: 'Шины', min: 120, max: 350, step: 5, default: 230, unit: 'кПа' },
@@ -118,6 +129,16 @@ export const sedan: VehicleDef = {
     crankTime: 0.55,
     idleControlMax: 0.3,
   },
+  powerplant: [
+    { kind: 'fuel', lambda: 0.88, overrun: 0.15 },
+    { kind: 'ignition', timing: 0 },
+    { kind: 'exhaust', popSensitivity: 1 },
+    { kind: 'turbo', enabled: false, boost: 0.9, size: 1, blowOff: true, antiLag: false },
+  ],
+  exhausts: [
+    [0.42, 0.24, -2.3],
+    [-0.42, 0.24, -2.3],
+  ],
   gearbox: { ratios: [3.6, 2.19, 1.41, 1.0, 0.83, 0.69], reverse: 3.4, finalDrive: 3.73, shiftTime: 0.22, clutchMaxTorque: 600 },
   tyre: {
     B: 10,

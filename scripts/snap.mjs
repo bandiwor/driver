@@ -5,6 +5,8 @@
  *   npm run snap -- --views=iso,top,cockpit --t=2 --beams --w=1600 --h=900
  *   npm run snap -- --vehicle=k1-sedan --kick=0,0,-8,0   # deform, then shoot
  *   npm run snap -- --drive=throttle:1,steer:0.6 --drive-t=2   # drive a scenario, then shoot
+ *   npm run snap -- --param=turbo.enabled:1,fuel.lambda:0.72 \
+ *        --drive=throttle:1@3 --drive=throttle:0@0.25           # chained steps "controls@seconds"
  *   npm run snap -- --url=http://localhost:5173   # use an already running server
  * Output: snapshots/<vehicle>-<view>[-beams].png
  */
@@ -25,7 +27,8 @@ const { values: a } = parseArgs({
     beams: { type: 'boolean', default: false },
     kick: { type: 'string', multiple: true, default: [] },
     after: { type: 'string', default: '1' },
-    drive: { type: 'string' },
+    drive: { type: 'string', multiple: true, default: [] },
+    param: { type: 'string' },
     'drive-t': { type: 'string', default: '2' },
     tag: { type: 'string', default: '' },
     out: { type: 'string', default: 'snapshots' },
@@ -63,9 +66,13 @@ for (const k of a.kick) {
   await page.evaluate(([n, x, y, z]) => window.__kuzov.kick(n, x, y, z), [node, vx, vy, vz])
 }
 if (a.kick.length) await page.evaluate((s) => window.__kuzov.simulate(s), Number(a.after))
-if (a.drive) {
-  const controls = Object.fromEntries(a.drive.split(',').map((kv) => kv.split(':')).map(([k, v]) => [k, Number(v)]))
-  await page.evaluate(([c, s]) => window.__kuzov.drive(c, s), [controls, Number(a['drive-t'])])
+const kv = (s) => Object.fromEntries(s.split(',').filter(Boolean).map((p) => p.split(':')).map(([k, v]) => [k, Number(v)]))
+if (a.param) {
+  for (const [id, v] of Object.entries(kv(a.param))) await page.evaluate(([i, x]) => window.__kuzov.setParam(i, x), [id, v])
+}
+for (const step of a.drive) {
+  const [controls, secs] = step.split('@')
+  await page.evaluate(([c, s]) => window.__kuzov.drive(c, s), [kv(controls), Number(secs ?? a['drive-t'])])
 }
 
 const files = []

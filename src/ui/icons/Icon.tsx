@@ -32,6 +32,8 @@ export const ICONS = {
   gearbox: 'M6 5v14M12 5v14M18 5v7M6 12h12M6 5.01M12 5.01M18 5.01',
   pedal: 'M8 3h8l-1 11H9zM7 21h10M12 14v7',
   warning: 'M12 3.5l9.5 16.5h-19zM12 10v4.5M12 17.5v.01',
+  turbo: 'M12 5a7 7 0 1 0 7 7M12 9a3 3 0 1 0 3 3M12 12h9M19 12V5M12 2v3M16 3l-1 2.6',
+  flame: 'M12 21c-3.9 0-6.5-2.6-6.5-6 0-3.5 3-5.3 3.5-9 2 1.3 3.2 3 3.4 5 .9-.8 1.5-2 1.6-3.3 2.3 1.9 4.5 4.6 4.5 7.3 0 3.4-2.6 6-6.5 6z',
 } as const
 
 export type IconName = keyof typeof ICONS

@@ -15,10 +15,11 @@ import type { BodyFrame } from '../physics/softbody/frame.ts'
 import { newGroundSample, type Ground } from '../physics/softbody/ground.ts'
 import type { SubstepHook } from '../physics/softbody/world.ts'
 import { engineDrive, type EngineSpec, type EngineState } from '../physics/vehicle/engine.ts'
+import type { EnginePipeline } from '../physics/vehicle/powerplant.ts'
 import { gearRatio, type GearboxSpec, type GearboxState } from '../physics/vehicle/gearbox.ts'
 import { newDrivelineState, solveDriveline, type DrivelineWheel } from '../physics/vehicle/driveline.ts'
 import { antiRollForce, preloadedRestLength, strutForce, type StrutSpec } from '../physics/vehicle/suspension.ts'
-import { slipAngle, slipRatio, tyreCoefs, tyreForces2, tyreTorqueStiffness, type TyreInput } from '../physics/vehicle/tyre.ts'
+import { slipAngle, slipRatio, tyreForces2, type TyreInput } from '../physics/vehicle/tyre.ts'
 import { suspensionOf, type VehicleBody } from './build.ts'
 import type { VehicleDef } from './types.ts'
 
@@ -27,6 +28,8 @@ const AIR_DENSITY = 1.2
 /** Low-speed floors for slip (m/s): keep slips finite and damper-like at rest. */
 const V0_LONG = 1
 const V0_LAT = 3
+/** Slip-ratio step for the numerical tyre slope. */
+const SLOPE_EPS = 0.01
 /** Reference brake bias at which WheelDef.brakeTorque is specified. */
 const REF_BIAS = 0.62
 
@@ -41,6 +44,8 @@ export interface WheelState {
   contact: boolean
   fx: number
   fy: number
+  /** Contact-patch sliding speed |(ωR − vx, vy)|, m/s (smoke / squeal). */
+  slipSpeed: number
 }
 
 export const newWheelState = (): WheelState => ({
@@ -54,6 +59,7 @@ export const newWheelState = (): WheelState => ({
   contact: false,
   fx: 0,
   fy: 0,
+  slipSpeed: 0,
 })
 
 /** Live-tunable chassis setup (derived from def + params). */
@@ -106,6 +112,7 @@ export class WheelSystem implements SubstepHook {
   readonly #frame: BodyFrame
   readonly #engineSpec: EngineSpec
   readonly #engine: EngineState
+  readonly #pipeline: EnginePipeline | undefined
   readonly #gbSpec: GearboxSpec
   readonly #gb: GearboxState
   readonly #dl: DrivelineWheel[]
@@ -119,14 +126,13 @@ export class WheelSystem implements SubstepHook {
   readonly #gs = newGroundSample()
   readonly #ti: TyreInput = { slipRatio: 0, slipAngle: 0, load: 0, nominalLoad: 0, surfaceMu: 1, camber: 0, pressure: 230 }
   readonly #tf = { fx: 0, fy: 0 }
-  readonly #tc = { B: 0, D: 0 }
 
   constructor(
     def: VehicleDef,
     vb: VehicleBody,
     frame: BodyFrame,
     ground: Ground,
-    engine: { spec: EngineSpec; state: EngineState },
+    engine: { spec: EngineSpec; state: EngineState; pipeline?: EnginePipeline },
     gearbox: { spec: GearboxSpec; state: GearboxState },
   ) {
     this.#def = def
@@ -136,6 +142,7 @@ export class WheelSystem implements SubstepHook {
     this.ground = ground
     this.#engineSpec = engine.spec
     this.#engine = engine.state
+    this.#pipeline = engine.pipeline
     this.#gbSpec = gearbox.spec
     this.#gb = gearbox.state
     const n = def.wheels.length
@@ -368,11 +375,21 @@ export class WheelSystem implements SubstepHook {
       const relax = Math.min(1, (h * Math.max(Math.abs(vx), V0_LAT)) / tyre.relaxationLength)
       w.slipAngle += (slipAngle(vx, vy, V0_LAT) - w.slipAngle) * relax
       const mu = (gs.friction * setup.grip) / tyre.D
-      this.#tyreInput(i, slipRatio(dl.omega, R, vx, V0_LONG), w.slipAngle, load, mu, camber)
+      const sr = slipRatio(dl.omega, R, vx, V0_LONG)
+      this.#tyreInput(i, sr, w.slipAngle, load, mu, camber)
       tyreForces2(tyre, ti, tf)
-      tyreCoefs(tyre, ti, this.#tc)
       dl.fx = tf.fx
-      dl.k = load > 0 ? tyreTorqueStiffness(tyre, load, this.#tc.D, this.#tc.B, vx, V0_LONG) : 0
+      // Implicit wheel needs the LOCAL slope dFx/dκ at the current slip (not the
+      // peak slope): past the peak the tyre cannot hold the wheel, so brakes can
+      // lock it and power can spin it up. Central difference; never negative.
+      if (load > 0) {
+        ti.slipRatio = sr + SLOPE_EPS
+        const fp = tyreForces2(tyre, ti, tf).fx
+        ti.slipRatio = sr - SLOPE_EPS
+        const fm = tyreForces2(tyre, ti, tf).fx
+        const slope = Math.max(0, (fp - fm) / (2 * SLOPE_EPS))
+        dl.k = (slope * R * R) / Math.max(Math.abs(vx), V0_LONG)
+      } else dl.k = 0
       dl.brake = this.#brakeTorque(i)
       const a = i * 12
       ax[a] = fwx
@@ -393,7 +410,7 @@ export class WheelSystem implements SubstepHook {
     const eng = this.#engine
     const shifting = this.#gb.shiftTimer > 0
     const inp = this.input
-    const te = engineDrive(this.#engineSpec, eng, shifting && inp.cutThrottle ? 0 : inp.throttle, inp.starter, h)
+    const te = engineDrive(this.#engineSpec, eng, shifting && inp.cutThrottle ? 0 : inp.throttle, inp.starter, h, this.#pipeline)
     this.driveline.engineOmega = eng.omega
     solveDriveline(
       {
@@ -415,14 +432,17 @@ export class WheelSystem implements SubstepHook {
       const dl = this.#dl[i]!
       w.omega = dl.omega
       w.angle = (w.angle + dl.omega * h) % (Math.PI * 2)
+      const a = i * 12
+      const vx = ax[a + 9]!
       if (w.load <= 0) {
         w.fx = 0
         w.fy = 0
         w.slipRatio = 0
+        w.slipSpeed = 0
         continue
       }
-      const a = i * 12
-      const vx = ax[a + 9]!
+      const vLat = Math.tan(w.slipAngle) * Math.max(Math.abs(vx), V0_LAT)
+      w.slipSpeed = Math.hypot(dl.omega * R - vx, vLat)
       const sr = slipRatio(dl.omega, R, vx, V0_LONG)
       this.#tyreInput(i, sr, w.slipAngle, w.load, ax[a + 11]!, ax[a + 10]!)
       tyreForces2(tyre, ti, tf)

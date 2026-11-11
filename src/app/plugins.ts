@@ -13,6 +13,7 @@ import type { AudioService } from '../audio/audio.ts'
 import { RenderService, type RenderOptions } from '../render/renderer.ts'
 import { CameraRig, newPose, type CameraMode } from '../render/cameraRig.ts'
 import { VehicleView } from '../render/vehicleView.ts'
+import { VehicleEffects, tyreSmokeIntensity } from '../render/effects.ts'
 import { newTelemetry } from '../vehicles/runtime.ts'
 import { wallMs } from '../sim/protocol.ts'
 import type { PhysicsHost } from '../sim/host.ts'
@@ -121,12 +122,29 @@ export const audioPlugin = (audio: AudioService): P => ({
     const host = ctx.get(T.sim)
     ctx.events.on('impact', ({ strength }) => audio.impact(strength))
     ctx.events.on('ui:pause', (p) => (p ? audio.suspend() : audio.resume()))
+    let pops = -1
+    let bovs = -1
     ctx.addSystem({
       id: 'audio',
       order: 40,
       update() {
         const t = host.telemetry
         audio.setEngine({ rpm: t.rpm, load: t.load, throttle: t.throttle })
+        audio.setTurbo(t.turbo ? t.turboSpin : 0, t.boost)
+        // Event counters are monotonic: play every pop/blow-off that happened since last frame.
+        if (pops < 0) pops = t.afterfires
+        if (bovs < 0) bovs = t.blowOffs
+        for (let i = Math.min(4, t.afterfires - pops); i > 0; i--) audio.afterfire(t.afterfireStrength)
+        if (t.blowOffs > bovs) audio.blowOff(host.vehicle.params.get('turbo.blowOff') >= 0.5)
+        pops = t.afterfires
+        bovs = t.blowOffs
+        let squeal = 0
+        const v = host.vehicle
+        for (let i = 0; i < v.wheels.length; i++) {
+          const w = v.wheels[i]!
+          squeal = Math.max(squeal, tyreSmokeIntensity(w.slipSpeed * 1.4, w.load, v.chassis.nominalLoad[i]!))
+        }
+        audio.setTyres(squeal)
       },
     })
   },
@@ -143,6 +161,10 @@ export const renderPlugin = (opts: RenderOptions): P => ({
     const view = new VehicleView(v.def, v.vb)
     render.scene.add(view.root)
     ctx.provide(T.vehicleView, view)
+    const effects = new VehicleEffects(v, host.telemetry)
+    render.scene.add(effects.group)
+    ctx.provide(T.effects, effects)
+    ctx.events.on('vehicle:reset', () => effects.clear())
     const rig = new CameraRig({ eye: v.frameLocal(v.def.eye), chaseDistance: 6.2, chaseHeight: 2.1, topHeight: 22 })
     ctx.provide(T.camera, rig)
     const pose = newPose()
@@ -160,12 +182,15 @@ export const renderPlugin = (opts: RenderOptions): P => ({
     ctx.addSystem({
       id: 'render',
       order: 60,
-      update() {
+      update(_alpha, frameDt) {
         view.update(v.prevPos, host.alpha, v.frame, v.wheels)
+        // Particles freeze with the game when paused.
+        effects.update(ctx.get(T.loop).paused ? 0 : Math.min(frameDt, 0.1))
         render.render()
       },
       dispose: () => {
         offPointer()
+        effects.dispose()
         view.dispose()
         render.dispose()
       },
@@ -243,6 +268,7 @@ export const telemetryPlugin = (): P => ({
       camera: 'chase',
       drawCalls: 0,
       triangles: 0,
+      particles: 0,
       physicsMode: `${host.kind} · ${host.transport}`,
       stepsPerSec: 0,
       latencyMs: 0,
@@ -266,6 +292,8 @@ export const telemetryPlugin = (): P => ({
           tel.drawCalls = i.calls
           tel.triangles = i.triangles
         }
+        const fx = ctx.tryGet(T.effects)
+        if (fx) tel.particles = fx.smoke.state.live + fx.fire.state.live
       },
     })
   },

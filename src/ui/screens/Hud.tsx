@@ -24,6 +24,19 @@ function ClutchMeter({ engagement }: { engagement: number }): JSX.Element {
   )
 }
 
+/** Turbo boost (bar gauge) as a horizontal meter up to 2 bar. */
+function BoostMeter({ boost }: { boost: number }): JSX.Element {
+  return (
+    <span class="k-chip" title="Наддув турбины">
+      <Icon name="turbo" size={16} />
+      <span class="k-meter" role="meter" aria-label="Наддув" aria-valuenow={boost} aria-valuemin={0} aria-valuemax={2}>
+        <span class="k-meter__fill" style={{ transform: `scaleX(${Math.min(1, boost / 2)})` }} />
+      </span>
+      +{boost.toFixed(1)} бар
+    </span>
+  )
+}
+
 export function Hud({ redline, maxRpm }: { redline: number; maxRpm: number }): JSX.Element {
   const cam = CAMERA_LABELS[cameraMode.value]
   const dmg = damagePct.value
@@ -68,6 +81,7 @@ export function Hud({ redline, maxRpm }: { redline: number; maxRpm: number }): J
           <Kbd>C</Kbd>
         </span>
         {manual && <ClutchMeter engagement={tel.clutch.value} />}
+        {tel.turbo.value && <BoostMeter boost={tel.boost.value} />}
         <span class={`k-chip ${dmg > 30 ? 'k-chip--danger' : dmg > 5 ? 'k-chip--warn' : ''}`}>
           <Icon name="body" size={16} />
           {dmg.toFixed(0)}%
@@ -82,6 +96,8 @@ export function Hud({ redline, maxRpm }: { redline: number; maxRpm: number }): J
             `latency ${tel.latencyMs.value} ms`,
             `draws   ${tel.drawCalls.value}`,
             `tris    ${tel.triangles.value}`,
+            `fx      ${tel.particles.value} particles`,
+            `λ ${tel.lambda.value.toFixed(2)} · EGT ${tel.egt.value}°C${tel.turbo.value ? ` · +${tel.boost.value.toFixed(2)} bar` : ''}`,
           ].join('\n')}
         </pre>
       )}

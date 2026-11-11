@@ -2,7 +2,8 @@
  * Binary state snapshot produced by the simulation each published tick and
  * consumed by the renderer/UI. One contiguous byte range per slot:
  *
- *   f64 header  [seq, timeMs (absolute, timeOrigin-based), simTime]
+ *   f64 header  [seq, timeMs (absolute, timeOrigin-based), simTime, afterfires, blowOffs]
+ *               (event counters are f64: exact integers, never wrap)
  *   f32 scalars [telemetry …, frame (12)]
  *   f32 pos     nodes·3   — state after the last step
  *   f32 prev    nodes·3   — state before the last step (render interpolation)
@@ -30,12 +31,21 @@ export const S = {
   clutch: 22,
   automatic: 23,
   grind: 24,
-  count: 28,
+  turbo: 25,
+  boost: 26,
+  turboSpin: 27,
+  lambda: 28,
+  egt: 29,
+  smoke: 30,
+  soot: 31,
+  afterfireStrength: 32,
+  count: 36,
 } as const
 
 const FRAME_KEYS = ['px', 'py', 'pz', 'fx', 'fy', 'fz', 'ux', 'uy', 'uz', 'vx', 'vy', 'vz'] as const satisfies readonly (keyof BodyFrame)[]
 
-export const WHEEL_FLOATS = 8
+export const WHEEL_FLOATS = 9
+const HEAD = 5
 
 export interface SnapshotLayout {
   readonly nodes: number
@@ -53,7 +63,7 @@ export interface SnapshotLayout {
 const align8 = (n: number): number => Math.ceil(n / 8) * 8
 
 export function layoutFor(nodes: number, beams: number, wheels = 0): SnapshotLayout {
-  const scalarsOff = 3 * 8
+  const scalarsOff = HEAD * 8
   const posOff = scalarsOff + S.count * 4
   const prevOff = posOff + nodes * 12
   const wheelsOff = prevOff + nodes * 12
@@ -85,7 +95,7 @@ export class SnapshotSlot {
   readonly flags: Uint8Array
 
   constructor(buf: ArrayBufferLike, offset: number, readonly L: SnapshotLayout) {
-    this.head = new Float64Array(buf, offset, 3)
+    this.head = new Float64Array(buf, offset, HEAD)
     this.scalars = new Float32Array(buf, offset + L.scalarsOff, S.count)
     this.pos = new Float32Array(buf, offset + L.posOff, L.nodes * 3)
     this.prev = new Float32Array(buf, offset + L.prevOff, L.nodes * 3)
@@ -100,6 +110,8 @@ export class SnapshotSlot {
     this.head[0] = seq
     this.head[1] = timeMs
     this.head[2] = sim.world.time
+    this.head[3] = tel.afterfires
+    this.head[4] = tel.blowOffs
     s[S.speedKmh] = tel.speedKmh
     s[S.rpm] = tel.rpm
     s[S.gear] = encodeGear(tel.gear)
@@ -113,6 +125,14 @@ export class SnapshotSlot {
     s[S.clutch] = tel.clutch
     s[S.automatic] = tel.automatic ? 1 : 0
     s[S.grind] = tel.grind ? 1 : 0
+    s[S.turbo] = tel.turbo ? 1 : 0
+    s[S.boost] = tel.boost
+    s[S.turboSpin] = tel.turboSpin
+    s[S.lambda] = tel.lambda
+    s[S.egt] = tel.egt
+    s[S.smoke] = tel.smoke
+    s[S.soot] = tel.soot
+    s[S.afterfireStrength] = tel.afterfireStrength
     const f = v.frame
     for (let i = 0; i < 12; i++) s[S.frame + i] = f[FRAME_KEYS[i]!]
     this.pos.set(v.body.pos)
@@ -131,6 +151,7 @@ export class SnapshotSlot {
       wf[o + 5] = w.slipAngle
       wf[o + 6] = w.compression
       wf[o + 7] = w.contact ? 1 : 0
+      wf[o + 8] = w.slipSpeed
     }
   }
 
@@ -153,6 +174,16 @@ export class SnapshotSlot {
     tel.clutch = s[S.clutch]!
     tel.automatic = s[S.automatic]! > 0.5
     tel.grind = s[S.grind]! > 0.5
+    tel.turbo = s[S.turbo]! > 0.5
+    tel.boost = s[S.boost]!
+    tel.turboSpin = s[S.turboSpin]!
+    tel.lambda = s[S.lambda]!
+    tel.egt = s[S.egt]!
+    tel.smoke = s[S.smoke]!
+    tel.soot = s[S.soot]!
+    tel.afterfireStrength = s[S.afterfireStrength]!
+    tel.afterfires = this.head[3]!
+    tel.blowOffs = this.head[4]!
     const f = v.frame
     for (let i = 0; i < 12; i++) f[FRAME_KEYS[i]!] = s[S.frame + i]!
     v.body.pos.set(this.pos)
@@ -171,6 +202,7 @@ export class SnapshotSlot {
       w.slipAngle = wf[o + 5]!
       w.compression = wf[o + 6]!
       w.contact = wf[o + 7]! > 0.5
+      w.slipSpeed = wf[o + 8]!
     }
   }
 }

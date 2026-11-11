@@ -8,6 +8,7 @@ import type { AudioService } from '../audio/audio.ts'
 import type { RenderService } from '../render/renderer.ts'
 import type { CameraRig, CameraMode } from '../render/cameraRig.ts'
 import type { VehicleView } from '../render/vehicleView.ts'
+import type { VehicleEffects } from '../render/effects.ts'
 
 export type GameEvents = {
   'vehicle:spawned': Vehicle
@@ -26,6 +27,7 @@ export interface Telemetry extends VehicleTelemetry {
   camera: CameraMode
   drawCalls: number
   triangles: number
+  particles: number
   /** e.g. "worker · shared", "inline · direct" */
   physicsMode: string
   stepsPerSec: number
@@ -41,5 +43,6 @@ export const T = {
   render: token<RenderService>('render'),
   camera: token<CameraRig>('camera'),
   vehicleView: token<VehicleView>('vehicleView'),
+  effects: token<VehicleEffects>('effects'),
   telemetry: token<Telemetry>('telemetry'),
 } as const

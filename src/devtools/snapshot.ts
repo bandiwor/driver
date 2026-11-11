@@ -46,11 +46,13 @@ export interface SnapshotApi {
   /** Hold driver controls (throttle/brake/steer/handbrake/clutch) for `seconds`, then render. */
   drive(controls: Partial<DriverControls>, seconds: number): void
   setBeams(on: boolean): void
+  /** Set any tuning param (e.g. 'turbo.enabled', 'fuel.lambda'). */
+  setParam(id: string, value: number): void
   /** Arbitrary per-node impulse for deformation tests: (nodeIndex, vx, vy, vz). */
   kick(node: number, vx: number, vy: number, vz: number): void
   render(): void
   debug(): unknown
-  info(): { nodes: number; beams: number; damage: number; triangles: number; calls: number }
+  info(): { nodes: number; beams: number; damage: number; triangles: number; calls: number; particles: number; afterfires: number }
 }
 
 declare global {
@@ -92,8 +94,18 @@ export async function runSnapshot(canvas: HTMLCanvasElement, p: SnapshotParams):
     drive(c, s) {
       Object.assign(controls, c)
       host.setControls(controls)
-      loop.simulate(s)
+      // Step physics and particles together so smoke/flames show in the shot.
+      const effects = k.get(T.effects)
+      const frame = 1 / 60
+      for (let t = 0; t < s - 1e-9; t += frame) {
+        loop.simulate(frame)
+        host.sync(0, 1)
+        effects.update(frame)
+      }
       api.render()
+    },
+    setParam(id, value) {
+      v.params.set(id, value)
     },
     kick(node, vx, vy, vz) {
       host.command({ type: 'kick', node, v: [vx, vy, vz] })
@@ -111,6 +123,8 @@ export async function runSnapshot(canvas: HTMLCanvasElement, p: SnapshotParams):
       nodes: v.body.nodeCount,
       beams: v.body.beamCount,
       damage: v.telemetry(newTelemetry()).damage,
+      afterfires: v.telemetry(newTelemetry()).afterfires,
+      particles: k.get(T.effects).smoke.state.live + k.get(T.effects).fire.state.live,
       ...r.info,
     }),
   }

@@ -11,6 +11,7 @@ const GROUP_ICONS: Readonly<Record<string, IconName>> = {
   Геометрия: 'wheel',
   Трансмиссия: 'gear',
   Двигатель: 'engine',
+  Турбина: 'turbo',
   Шины: 'tyre',
   Тормоза: 'brake',
   Кузов: 'body',

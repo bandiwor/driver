@@ -38,4 +38,18 @@ describe.runIf(process.env['PERF'] === '1')('perf', () => {
     port1.close()
     port2.close()
   })
+
+  it('particles: updating a full smoke pool is cheap', async () => {
+    const { ParticleState, newEmit } = await import('../../render/particles.ts')
+    const s = new ParticleState(2500)
+    const e = { ...newEmit(), life: 1e9, vx: 1, buoyancy: 0.3, drag: 1 }
+    for (let i = 0; i < 2500; i++) s.emit(e)
+    for (let i = 0; i < 200; i++) s.update(1 / 120)
+    const n = 2000
+    const t0 = performance.now()
+    for (let i = 0; i < n; i++) s.update(1 / 120)
+    const ms = (performance.now() - t0) / n
+    console.info(`[perf] ParticleState.update, 2500 live: ${ms.toFixed(3)} ms`)
+    expect(ms).toBeLessThan(0.5)
+  })
 })

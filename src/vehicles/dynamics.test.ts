@@ -6,6 +6,7 @@
 import { describe, expect, it } from 'vitest'
 import { Simulation, defaultSimConfig } from '../sim/simulation.ts'
 import { newTelemetry } from './runtime.ts'
+import { tyreSmokeIntensity } from '../render/effects.ts'
 
 const HZ = 120
 const tel = newTelemetry()
@@ -104,6 +105,34 @@ const roll = (spring: number): number => {
   for (let i = 0; i < HZ * 2; i++) sim.step()
   const [fl, fr] = sim.vehicle.wheels
   return Math.abs(fl!.compression - fr!.compression)
+}
+
+/** 0.8 s steady turn from 70 km/h: yaw, peak rear tyre smoke, rear wheel speed. */
+const handbrakeTurn = (handbrake: number): { yaw: number; smoke: number; rearOmega: number } => {
+  const sim = make()
+  accelerateTo(sim, 70)
+  const h0 = heading(sim)
+  sim.controls.steer = -0.6
+  sim.controls.handbrake = handbrake
+  let smoke = 0
+  for (let i = 0; i < HZ * 0.8; i++) {
+    sim.step()
+    const v = sim.vehicle
+    for (let w = 2; w < 4; w++) smoke = Math.max(smoke, tyreSmokeIntensity(v.wheels[w]!.slipSpeed, v.wheels[w]!.load, v.chassis.nominalLoad[w]!))
+  }
+  const [, , rl, rr] = sim.vehicle.wheels
+  return { yaw: Math.abs(heading(sim) - h0), smoke, rearOmega: Math.abs(rl!.omega) + Math.abs(rr!.omega) }
+}
+
+/** Time 60→140 km/h, NA vs turbo (0.8 bar). */
+const rollingAccel = (turbo: boolean): number => {
+  const sim = make()
+  if (turbo) {
+    sim.vehicle.params.set('turbo.enabled', 1)
+    sim.vehicle.params.set('turbo.boost', 0.8)
+  }
+  accelerateTo(sim, 60)
+  return accelerateTo(sim, 140)
 }
 
 describe('vehicle dynamics', () => {
@@ -257,6 +286,32 @@ describe('vehicle dynamics', () => {
     run(sim, 0.3)
     expect(sim.vehicle.shift(-1)).toBe(true) // 1 → N while rolling
     expect(sim.vehicle.shift(-1)).toBe(false) // N → R while rolling forward: refused
+  })
+
+  it('full brake without ABS locks the wheels (sliding friction, not a magic ABS)', () => {
+    const sim = make()
+    accelerateTo(sim, 80)
+    sim.controls.brake = 1
+    run(sim, 0.4)
+    const [fl, fr] = sim.vehicle.wheels
+    expect(Math.abs(fl!.omega)).toBeLessThan(1)
+    expect(Math.abs(fr!.omega)).toBeLessThan(1)
+    expect(fl!.slipSpeed).toBeGreaterThan(10)
+  })
+
+  it('handbrake at speed locks the rears and swings the tail out (drift + tyre smoke)', () => {
+    const grip = handbrakeTurn(0)
+    const slide = handbrakeTurn(1)
+    expect(slide.rearOmega).toBeLessThan(2) // rears locked
+    expect(slide.smoke).toBeGreaterThan(0.5)
+    expect(grip.smoke).toBeLessThan(0.3) // at most light understeer scrub
+    expect(slide.yaw).toBeGreaterThan(grip.yaw * 1.3) // tail swings out
+  })
+
+  it('turbo: much stronger rolling acceleration 60→140 km/h (traction not limiting)', () => {
+    const na = rollingAccel(false)
+    const tc = rollingAccel(true)
+    expect(tc).toBeLessThan(na * 0.8)
   })
 
   it('automatic never stalls when braking to a stop', () => {

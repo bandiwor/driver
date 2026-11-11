@@ -14,6 +14,7 @@
  */
 import { clamp, RADS_TO_RPM, RPM_TO_RADS } from '../../core/math/scalar.ts'
 import { sample, type Curve } from './curve.ts'
+import type { EnginePipeline } from './powerplant.ts'
 
 export interface EngineSpec {
   torqueCurve: Curve // rpm -> Nm at full throttle
@@ -92,7 +93,14 @@ export const starterTorque = (spec: EngineSpec, rpm: number): number =>
  * flywheel (Nm). Does NOT integrate — the driveline solver integrates the
  * flywheel together with the clutch (implicitly).
  */
-export function engineDrive(spec: EngineSpec, s: EngineState, pedal: number, starter = 0, dt = 0): number {
+export function engineDrive(
+  spec: EngineSpec,
+  s: EngineState,
+  pedal: number,
+  starter = 0,
+  dt = 0,
+  pipeline?: EnginePipeline,
+): number {
   const rpm = engineRpm(s)
   // ── running / stalled state machine ──
   if (s.running) {
@@ -114,6 +122,7 @@ export function engineDrive(spec: EngineSpec, s: EngineState, pedal: number, sta
   const cranking = starter > 0.5 && !(s.running && !s.catching) ? starterTorque(spec, rpm) : 0
 
   if (!s.running) {
+    pipeline?.run(spec, rpm, 0, pedal, false, dt)
     s.throttle = 0
     s.limiterCut = false
     s.load = 0
@@ -128,10 +137,13 @@ export function engineDrive(spec: EngineSpec, s: EngineState, pedal: number, sta
   else if (rpm < spec.limiterRpm - 150) s.limiterCut = false
   if (s.limiterCut) thr = 0
   s.throttle = thr
-  const t = engineTorque(spec, rpm, thr) + cranking
+  // Combustion: the module pipeline (intake/fuel/ignition/exhaust) when
+  // present, else the plain torque map × throttle.
+  const combustion = pipeline ? pipeline.run(spec, rpm, thr, pedal, true, dt) : sample(spec.torqueCurve, rpm) * thr
+  const t = combustion - engineLosses(spec, rpm, thr) + cranking
   s.torque = t
   const full = sample(spec.torqueCurve, rpm)
-  s.load = full > 0 ? clamp((t + spec.frictionTorque) / full, 0, 1) : 0
+  s.load = full > 0 ? clamp((t + spec.frictionTorque) / full, 0, 1.5) : 0
   return t
 }
 

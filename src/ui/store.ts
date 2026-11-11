@@ -34,6 +34,11 @@ export const tel = {
   clutch: signal(1),
   automatic: signal(true),
   grind: signal(false),
+  turbo: signal(false),
+  boost: signal(0),
+  lambda: signal(0.88),
+  egt: signal(0),
+  particles: signal(0),
   fps: signal(0),
   physicsMs: signal(0),
   drawCalls: signal(0),
@@ -89,6 +94,11 @@ export function bindGame(game: Game, sampleHz = 15): GameBridge {
       tel.clutch.value = Math.round(t.clutch * 20) / 20
       tel.automatic.value = t.automatic
       tel.grind.value = t.grind
+      tel.turbo.value = t.turbo
+      tel.boost.value = Math.round(t.boost * 20) / 20
+      tel.lambda.value = Math.round(t.lambda * 100) / 100
+      tel.egt.value = Math.round(t.egt / 10) * 10
+      tel.particles.value = t.particles
       tel.fps.value = Math.round(t.fps)
       tel.physicsMs.value = Math.round(t.physicsMs * 100) / 100
       tel.drawCalls.value = t.drawCalls

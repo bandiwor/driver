@@ -5,6 +5,7 @@
 import type { EngineSpec } from '../physics/vehicle/engine.ts'
 import type { GearboxSpec } from '../physics/vehicle/gearbox.ts'
 import type { TyreSpec } from '../physics/vehicle/tyre.ts'
+import type { EngineModuleDef } from '../physics/vehicle/powerplant.ts'
 import type { ParamDef } from '../core/params.ts'
 
 /** One cross-section of the body lattice along the vehicle's length (z). */
@@ -80,6 +81,10 @@ export interface VehicleDef {
   suspensionRear: SuspensionDef
   drivetrain: DrivetrainDef
   engine: EngineSpec
+  /** Combustion pipeline modules (fuel, ignition, exhaust, turbo, …). */
+  powerplant: readonly EngineModuleDef[]
+  /** Tailpipe tips, body-local design coordinates (exhaust points backwards, −z). */
+  exhausts: readonly (readonly [number, number, number])[]
   gearbox: GearboxSpec
   tyre: TyreSpec
   maxSteer: number // rad

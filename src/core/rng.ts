@@ -4,6 +4,9 @@ export class Rng {
   constructor(seed = 0x9e3779b9) {
     this.#s = seed >>> 0
   }
+  reseed(seed: number): void {
+    this.#s = seed >>> 0
+  }
   next(): number {
     let t = (this.#s = (this.#s + 0x6d2b79f5) >>> 0)
     t = Math.imul(t ^ (t >>> 15), t | 1)
