@@ -1,67 +1,62 @@
 /**
  * Built-in plugins. Each is self-contained and can be replaced or omitted
- * (tests use physics+vehicle only; snapshot mode skips input/audio).
- * System order: 0 input → 10 vehicle pre → 20 physics → 30 vehicle post →
- * 40 audio → 50 camera → 60 render → 90 telemetry.
+ * (snapshot mode skips input/audio). All simulation goes through PhysicsHost
+ * (inline or worker); plugins never touch the physics world directly.
+ *
+ * Fixed step:  0 input → 20 sim (inline: step; worker: push controls)
+ * Frame:       0 input actions → 5 sim.sync (pull snapshot, alpha) →
+ *              40 audio → 50 camera → 60 render → 90 telemetry
  */
 import type { Plugin } from '../core/kernel.ts'
-import { PhysicsWorld } from '../physics/softbody/world.ts'
-import { FlatGround } from '../physics/softbody/ground.ts'
-import { Vehicle, newTelemetry } from '../vehicles/runtime.ts'
-import { getVehicle } from '../vehicles/registry.ts'
 import { InputMapper } from '../input/input.ts'
 import type { AudioService } from '../audio/audio.ts'
 import { RenderService, type RenderOptions } from '../render/renderer.ts'
 import { CameraRig, newPose } from '../render/cameraRig.ts'
 import { VehicleView } from '../render/vehicleView.ts'
+import { newTelemetry } from '../vehicles/runtime.ts'
+import { wallMs } from '../sim/protocol.ts'
+import type { PhysicsHost } from '../sim/host.ts'
 import { T, type GameEvents, type Telemetry } from './tokens.ts'
 
 type P = Plugin<GameEvents>
 
-export const physicsPlugin = (substeps = 16): P => ({
-  id: 'physics',
+export const simPlugin = (host: PhysicsHost): P => ({
+  id: 'sim',
   setup(ctx) {
-    const world = new PhysicsWorld(new FlatGround(0), { substeps })
-    ctx.provide(T.world, world)
+    ctx.provide(T.sim, host)
+    ctx.provide(T.vehicle, host.vehicle)
+    const off = host.onImpact((strength) => ctx.events.emit('impact', { strength }))
+    ctx.events.on('ui:pause', (p) => host.setPaused(p))
     ctx.addSystem({
-      id: 'physics',
+      id: 'sim',
       order: 20,
       fixedUpdate(dt) {
-        const t0 = performance.now()
-        world.step(dt)
-        const tel = ctx.tryGet(T.telemetry)
-        if (tel) tel.physicsMs = tel.physicsMs * 0.9 + (performance.now() - t0) * 0.1
-        if (world.stats.broken > 0) ctx.events.emit('impact', { strength: Math.min(1, world.stats.broken / 8) })
+        const input = ctx.tryGet(T.input)
+        if (input) host.setControls(input.controls)
+        host.fixedUpdate(dt)
       },
     })
-  },
-})
-
-export const vehiclePlugin = (vehicleId: string): P => ({
-  id: 'vehicle',
-  requires: ['physics'],
-  setup(ctx) {
-    const world = ctx.get(T.world)
-    const v = new Vehicle(getVehicle(vehicleId), [0, 0.05, 0])
-    world.add(v.body)
-    ctx.provide(T.vehicle, v)
-    const idle = { throttle: 0, brake: 0, steer: 0, handbrake: 0, clutch: 0 }
     ctx.addSystem({
-      id: 'vehicle.pre',
-      order: 10,
-      fixedUpdate(dt) {
-        v.preStep(dt, ctx.tryGet(T.input)?.controls ?? idle)
+      id: 'sim.sync',
+      order: 5,
+      update(alpha) {
+        host.sync(wallMs(), alpha)
+      },
+      dispose() {
+        off()
+        host.dispose()
       },
     })
-    ctx.addSystem({ id: 'vehicle.post', order: 30, fixedUpdate: () => v.postStep() })
-    ctx.events.emit('vehicle:spawned', v)
+    ctx.events.emit('vehicle:spawned', host.vehicle)
   },
 })
 
 export const inputPlugin = (target: Window): P => ({
   id: 'input',
+  requires: ['sim'],
   setup(ctx) {
     const input = new InputMapper()
+    const host = ctx.get(T.sim)
     ctx.provide(T.input, input)
     const down = (e: KeyboardEvent): void => {
       if (e.target instanceof HTMLInputElement) return
@@ -76,15 +71,13 @@ export const inputPlugin = (target: Window): P => ({
       id: 'input',
       order: 0,
       fixedUpdate(dt) {
-        const v = ctx.tryGet(T.vehicle)
-        input.update(dt, v ? Math.hypot(v.frame.vx, v.frame.vz) : 0)
-        if (v) {
-          if (input.consume('shiftUp')) v.shift(1)
-          if (input.consume('shiftDown')) v.shift(-1)
-          if (input.consume('reset')) {
-            v.reset()
-            ctx.events.emit('vehicle:reset', v)
-          }
+        const f = host.vehicle.frame
+        input.update(dt, Math.hypot(f.vx, f.vz))
+        if (input.consume('shiftUp')) host.command({ type: 'shift', delta: 1 })
+        if (input.consume('shiftDown')) host.command({ type: 'shift', delta: -1 })
+        if (input.consume('reset')) {
+          host.command({ type: 'reset' })
+          ctx.events.emit('vehicle:reset', host.vehicle)
         }
       },
       update() {
@@ -105,30 +98,31 @@ export const inputPlugin = (target: Window): P => ({
 
 export const audioPlugin = (audio: AudioService): P => ({
   id: 'audio',
-  requires: ['vehicle'],
+  requires: ['sim'],
   setup(ctx) {
     ctx.provide(T.audio, audio)
-    const v = ctx.get(T.vehicle)
+    const host = ctx.get(T.sim)
     ctx.events.on('impact', ({ strength }) => audio.impact(strength))
     ctx.events.on('ui:pause', (p) => (p ? audio.suspend() : audio.resume()))
     ctx.addSystem({
       id: 'audio',
       order: 40,
       update() {
-        audio.setEngine({ rpm: v.telemetry(scratch).rpm, load: v.engine.load, throttle: v.engine.throttle })
+        const t = host.telemetry
+        audio.setEngine({ rpm: t.rpm, load: t.load, throttle: t.throttle })
       },
     })
   },
 })
-const scratch = newTelemetry()
 
 export const renderPlugin = (opts: RenderOptions): P => ({
   id: 'render',
-  requires: ['vehicle'],
+  requires: ['sim'],
   setup(ctx) {
     const render = new RenderService(opts)
     ctx.provide(T.render, render)
-    const v = ctx.get(T.vehicle)
+    const host = ctx.get(T.sim)
+    const v = host.vehicle
     const view = new VehicleView(v.def, v.vb)
     render.scene.add(view.root)
     ctx.provide(T.vehicleView, view)
@@ -148,8 +142,8 @@ export const renderPlugin = (opts: RenderOptions): P => ({
     ctx.addSystem({
       id: 'render',
       order: 60,
-      update(alpha) {
-        view.update(v.prevPos, alpha, v.frame)
+      update() {
+        view.update(v.prevPos, host.alpha, v.frame)
         render.render()
       },
       dispose: () => {
@@ -162,16 +156,30 @@ export const renderPlugin = (opts: RenderOptions): P => ({
 
 export const telemetryPlugin = (): P => ({
   id: 'telemetry',
-  requires: ['vehicle'],
+  requires: ['sim'],
   setup(ctx) {
-    const tel: Telemetry = { ...newTelemetry(), fps: 0, physicsMs: 0, frameMs: 0, camera: 'chase', drawCalls: 0, triangles: 0 }
+    const host = ctx.get(T.sim)
+    const tel: Telemetry = {
+      ...newTelemetry(),
+      fps: 0,
+      physicsMs: 0,
+      frameMs: 0,
+      camera: 'chase',
+      drawCalls: 0,
+      triangles: 0,
+      physicsMode: `${host.kind} · ${host.transport}`,
+      stepsPerSec: 0,
+      latencyMs: 0,
+    }
     ctx.provide(T.telemetry, tel)
-    const v = ctx.get(T.vehicle)
     ctx.addSystem({
       id: 'telemetry',
       order: 90,
       update(_a, frameDt) {
-        v.telemetry(tel)
+        Object.assign(tel, host.telemetry)
+        tel.physicsMs = host.stats.physicsMs
+        tel.stepsPerSec = host.stats.stepsPerSec
+        tel.latencyMs = tel.latencyMs * 0.9 + host.stats.latencyMs * 0.1
         tel.frameMs = tel.frameMs * 0.9 + frameDt * 1000 * 0.1
         tel.fps = tel.frameMs > 0 ? 1000 / tel.frameMs : 0
         const cam = ctx.tryGet(T.camera)

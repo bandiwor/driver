@@ -19,4 +19,24 @@ describe.runIf(process.env['PERF'] === '1')('perf', () => {
     // Budget: 120 Hz → 8.3 ms per step; one car must use < 10% of it.
     expect(ms).toBeLessThan(0.83)
   })
+
+  it('main thread: pulling a worker snapshot costs a few microseconds', async () => {
+    const { WorkerHost } = await import('../../sim/host.ts')
+    const { SimServer } = await import('../../sim/server.ts')
+    const { defaultSimConfig } = await import('../../sim/simulation.ts')
+    const { port1, port2 } = new MessageChannel()
+    // oxlint-disable-next-line no-new
+    new SimServer(port2 as never)
+    const host = await WorkerHost.create(port1 as never, defaultSimConfig('k1-sedan'), { transport: 'shared', clock: 'manual' })
+    await host.step(1)
+    const n = 20_000
+    const t0 = performance.now()
+    for (let i = 0; i < n; i++) host.sync(i)
+    const us = ((performance.now() - t0) / n) * 1000
+    console.info(`[perf] WorkerHost.sync (shared, no new data): ${us.toFixed(2)} µs`)
+    expect(us).toBeLessThan(20)
+    host.dispose()
+    port1.close()
+    port2.close()
+  })
 })

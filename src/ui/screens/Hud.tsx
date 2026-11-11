@@ -44,7 +44,14 @@ export function Hud({ redline, maxRpm }: { redline: number; maxRpm: number }): J
       </div>
       {debugOverlay.value && (
         <pre class="k-debug">
-          {`FPS     ${tel.fps.value}\nphysics ${tel.physicsMs.value} ms\ndraws   ${tel.drawCalls.value}\ntris    ${tel.triangles.value}`}
+          {[
+            `FPS     ${tel.fps.value}`,
+            `physics ${tel.physicsMode.value}`,
+            `step    ${tel.physicsMs.value} ms · ${tel.stepsPerSec.value}/s`,
+            `latency ${tel.latencyMs.value} ms`,
+            `draws   ${tel.drawCalls.value}`,
+            `tris    ${tel.triangles.value}`,
+          ].join('\n')}
         </pre>
       )}
     </div>

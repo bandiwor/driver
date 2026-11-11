@@ -1,4 +1,7 @@
-/** Entry: `?snap` → deterministic snapshot mode, otherwise the game UI. */
+/**
+ * Entry: `?snap` → deterministic snapshot mode, otherwise the game UI.
+ * `?physics=inline` forces main-thread physics (default: Web Worker).
+ */
 import './ui/styles/base.css'
 
 const canvas = document.querySelector<HTMLCanvasElement>('#viewport')
@@ -12,5 +15,5 @@ if (q.has('snap')) {
   await runSnapshot(canvas, parseSnapshotParams(q))
 } else {
   const [{ render, h }, { App }] = await Promise.all([import('preact'), import('./ui/App.tsx')])
-  render(h(App, { canvas, vehicleId: q.get('vehicle') ?? 'k1-sedan' }), uiRoot)
+  render(h(App, { canvas, vehicleId: q.get('vehicle') ?? 'k1-sedan', physics: q.get('physics') === 'inline' ? 'inline' : 'worker' }), uiRoot)
 }

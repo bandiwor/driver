@@ -3,7 +3,9 @@
 Read docs/ARCHITECTURE.md (layers, frame order, data layout), docs/PLAN.md
 (current step), docs/STYLE.md (UI tokens + code rules) before changing code.
 
-- Layer rule: core → physics → vehicles → render/audio/input → app/devtools → ui.
+- Layer rule: core → physics → vehicles → sim → render/audio/input → app/devtools → ui.
+- Physics runs in a worker: main thread talks only to `PhysicsHost` (src/sim/host.ts);
+  new sim features = Simulation method + SimCommand + protocol, tested over MessageChannel.
   `three` only in src/render, `preact` only in src/ui. No cycles.
 - No allocations in fixed-step/frame hot paths. Typed arrays for physics.
 - Strict TS: no `any`, no ts-ignore. `!` allowed only for guaranteed indices in hot loops.

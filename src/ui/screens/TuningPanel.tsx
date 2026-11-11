@@ -15,6 +15,11 @@ const GROUP_ICONS: Readonly<Record<string, IconName>> = {
   Кузов: 'body',
 }
 
+const tabFor = (g: string): { id: string; label: string; icon?: IconName } => {
+  const icon = GROUP_ICONS[g]
+  return icon ? { id: g, label: g, icon } : { id: g, label: g }
+}
+
 export interface TuningPanelProps {
   params: ParamStore
   onClose?: () => void
@@ -36,7 +41,7 @@ export function TuningPanel({ params, onClose }: TuningPanelProps): JSX.Element 
         </>
       }
     >
-      <Tabs tabs={groups.map((g) => ({ id: g, label: g, ...(GROUP_ICONS[g] ? { icon: GROUP_ICONS[g] } : {}) }))} active={group} onChange={setGroup} />
+      <Tabs tabs={groups.map((g) => tabFor(g))} active={group} onChange={setGroup} />
       <div class="k-tuning__list">
         {params.defs
           .filter((d) => d.group === group)

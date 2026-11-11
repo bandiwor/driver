@@ -30,6 +30,9 @@ export const tel = {
   physicsMs: signal(0),
   drawCalls: signal(0),
   triangles: signal(0),
+  physicsMode: signal(''),
+  stepsPerSec: signal(0),
+  latencyMs: signal(0),
 }
 export const damagePct = computed(() => Math.min(100, tel.damage.value * 2000))
 
@@ -50,7 +53,8 @@ export interface GameBridge {
 
 export function bindGame(game: Game, sampleHz = 15): GameBridge {
   const k = game.kernel
-  const v = k.get(T.vehicle)
+  const host = game.host
+  const v = host.vehicle
   const t: Telemetry = k.get(T.telemetry)
   const offs: (() => void)[] = []
   offs.push(k.events.on('camera:mode', (m) => (cameraMode.value = m)))
@@ -69,6 +73,9 @@ export function bindGame(game: Game, sampleHz = 15): GameBridge {
       tel.physicsMs.value = Math.round(t.physicsMs * 100) / 100
       tel.drawCalls.value = t.drawCalls
       tel.triangles.value = t.triangles
+      tel.physicsMode.value = t.physicsMode
+      tel.stepsPerSec.value = Math.round(t.stepsPerSec)
+      tel.latencyMs.value = Math.round(t.latencyMs * 10) / 10
     })
   }, 1000 / sampleHz)
   return {
@@ -86,7 +93,7 @@ export function bindGame(game: Game, sampleHz = 15): GameBridge {
       showBeams.value = on
     },
     reset() {
-      v.reset()
+      host.command({ type: 'reset' })
       k.events.emit('vehicle:reset', v)
     },
     dispose() {

@@ -13,6 +13,13 @@ const cube = (size = 1, y = 2, spring = 2e5, yieldStrain = Infinity, breakStrain
   return b.build()
 }
 
+const runCube = (): number[] => {
+  const w = new PhysicsWorld(new FlatGround(0))
+  const b = w.add(cube())
+  for (let i = 0; i < 200; i++) w.step(1 / 120)
+  return Array.from(b.pos)
+}
+
 describe('soft body solver', () => {
   it('builder dedupes beams and computes rest lengths', () => {
     const b = new SoftBodyBuilder()
@@ -54,12 +61,6 @@ describe('soft body solver', () => {
   })
 
   it('is deterministic', () => {
-    const run = () => {
-      const w = new PhysicsWorld(new FlatGround(0))
-      const b = w.add(cube())
-      for (let i = 0; i < 200; i++) w.step(1 / 120)
-      return Array.from(b.pos)
-    }
-    expect(run()).toEqual(run())
+    expect(runCube()).toEqual(runCube())
   })
 })

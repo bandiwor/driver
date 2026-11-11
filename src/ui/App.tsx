@@ -1,7 +1,7 @@
 /** Root UI. Owns game lifecycle (lazy-created on "Drive"). */
 import type { JSX } from 'preact'
 import { useEffect, useState } from 'preact/hooks'
-import { createGame } from '../app/game.ts'
+import { createGame, type PhysicsMode } from '../app/game.ts'
 import { WebAudio, type AudioService } from '../audio/audio.ts'
 import { getVehicle } from '../vehicles/registry.ts'
 import { bindGame, paused, screen, tuningOpen, volume, type GameBridge } from './store.ts'
@@ -10,7 +10,13 @@ import { Hud } from './screens/Hud.tsx'
 import { TuningPanel } from './screens/TuningPanel.tsx'
 import { PauseMenu } from './screens/PauseMenu.tsx'
 
-export function App({ canvas, vehicleId }: { canvas: HTMLCanvasElement; vehicleId: string }): JSX.Element {
+export interface AppProps {
+  canvas: HTMLCanvasElement
+  vehicleId: string
+  physics: PhysicsMode
+}
+
+export function App({ canvas, vehicleId, physics }: AppProps): JSX.Element {
   const [bridge, setBridge] = useState<GameBridge | null>(null)
   const [audio] = useState<AudioService>(() => new WebAudio(getVehicle(vehicleId).engine.cylinders))
   const [loading, setLoading] = useState(false)
@@ -26,7 +32,7 @@ export function App({ canvas, vehicleId }: { canvas: HTMLCanvasElement; vehicleI
     setLoading(true)
     await audio.init().catch((e: unknown) => console.warn('Audio unavailable', e))
     audio.setMasterVolume(volume.value)
-    const game = await createGame({ canvas, vehicleId, audio })
+    const game = await createGame({ canvas, vehicleId, audio, physics })
     const b = bindGame(game)
     setBridge(b)
     game.start()

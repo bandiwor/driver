@@ -19,12 +19,16 @@
 - [x] Snapshot-режим + `npm run snap`, e2e `npm run e2e` (dev и prod)
 - [x] Документы: ARCHITECTURE, PLAN, STYLE
 
-## Шаг 1 — Физика в Web Worker
+## ✅ Шаг 1 — Физика в Web Worker (готово)
 
-- `PhysicsHost` (inline / worker), протокол сообщений, SharedArrayBuffer
-  (COOP/COEP уже включены), двойной буфер позиций, фолбэк на transferable
-- Ввод → воркер через SAB-кольцо; телеметрия ← воркер
-- Тест: inline и worker дают одинаковый результат; perf-тест главного потока
+- [x] `Simulation` (чистая), `PhysicsHost`: `InlineHost` / `WorkerHost`, shadow-машина
+- [x] Протокол сообщений, `SimServer` с собственными часами (Atomics.wait + yield)
+- [x] SharedArrayBuffer: неблокирующий тройной буфер снапшотов, SAB управления
+- [x] Фолбэк `transfer` (пул transferable-буферов) без cross-origin isolation
+- [x] Интерполяция по времени снапшота, команды/тюнинг/удары через протокол
+- [x] Автофолбэк на inline, `?physics=inline`
+- [x] Тесты: тройной буфер, снапшот, WorkerHost ≡ InlineHost (оба транспорта),
+      perf `sync()`, e2e в режимах worker·shared / worker·transfer / inline / prod
 
 ## Шаг 2 — Колёса, подвеска, привод (ощущение машины)
 

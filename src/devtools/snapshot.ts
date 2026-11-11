@@ -6,8 +6,11 @@
  */
 import { Kernel } from '../core/kernel.ts'
 import { FixedStepLoop } from '../core/loop.ts'
-import { physicsPlugin, renderPlugin, vehiclePlugin } from '../app/plugins.ts'
+import { renderPlugin, simPlugin } from '../app/plugins.ts'
+import { InlineHost } from '../sim/host.ts'
+import { defaultSimConfig } from '../sim/simulation.ts'
 import { T, type GameEvents } from '../app/tokens.ts'
+import { newTelemetry } from '../vehicles/runtime.ts'
 import { newPose, snapPose, SNAP_VIEWS, type SnapView } from '../render/cameraRig.ts'
 
 export interface SnapshotParams {
@@ -60,8 +63,10 @@ export async function runSnapshot(canvas: HTMLCanvasElement, p: SnapshotParams):
   const k = new Kernel<GameEvents>()
   const loop = new FixedStepLoop({ step: (dt) => k.fixedUpdate(dt), render: (a, f) => k.update(a, f) }, { stepHz: 120, maxStepsPerFrame: 8 })
   k.provide(T.loop, loop)
-  await k.use(physicsPlugin(), vehiclePlugin(p.vehicle), renderPlugin({ canvas, snapshot: { width: p.w, height: p.h } }))
-  const v = k.get(T.vehicle)
+  // Snapshots are deterministic: physics always inline, stepped by loop.simulate().
+  const host = new InlineHost(defaultSimConfig(p.vehicle))
+  await k.use(simPlugin(host), renderPlugin({ canvas, snapshot: { width: p.w, height: p.h } }))
+  const v = host.vehicle
   const r = k.get(T.render)
   const view = k.get(T.vehicleView)
   const rig = k.get(T.camera)
@@ -81,10 +86,7 @@ export async function runSnapshot(canvas: HTMLCanvasElement, p: SnapshotParams):
       api.render()
     },
     kick(node, vx, vy, vz) {
-      const b = v.body
-      b.vel[node * 3] = (b.vel[node * 3] ?? 0) + vx
-      b.vel[node * 3 + 1] = (b.vel[node * 3 + 1] ?? 0) + vy
-      b.vel[node * 3 + 2] = (b.vel[node * 3 + 2] ?? 0) + vz
+      host.command({ type: 'kick', node, v: [vx, vy, vz] })
     },
     render() {
       view.update(v.body.pos, 1, v.frame)
@@ -98,7 +100,7 @@ export async function runSnapshot(canvas: HTMLCanvasElement, p: SnapshotParams):
     info: () => ({
       nodes: v.body.nodeCount,
       beams: v.body.beamCount,
-      damage: v.telemetry({ speedKmh: 0, rpm: 0, gear: 'N', throttle: 0, load: 0, damage: 0, limiter: false }).damage,
+      damage: v.telemetry(newTelemetry()).damage,
       ...r.info,
     }),
   }

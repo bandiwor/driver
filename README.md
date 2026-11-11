@@ -9,7 +9,8 @@ npm install
 npm run dev        # http://localhost:5173
 npm run check      # typecheck + oxlint + unit/component tests
 npm run build      # релизная сборка (Oxc minify + Lightning CSS)
-npm run e2e        # e2e-прогон UI в headless Chromium (--preview для prod-сборки)
+npm run e2e        # e2e-прогон UI в headless Chromium
+                   #   --preview  --physics=inline  --no-isolation
 npm run snap       # PNG машины из всех проекций → snapshots/
 npm run perf       # бюджет производительности физики
 ```
@@ -17,5 +18,9 @@ npm run perf       # бюджет производительности физи�
 Управление: **W/S** газ/тормоз, **A/D** руль, **Space** ручник, **Shift**
 сцепление, **Q/E** передачи, **C** камера (сзади / салон / сверху / орбита),
 **R** сброс, **T** тюнинг, **Esc** пауза, **F3** отладка и каркас балок.
+
+Физика по умолчанию работает в Web Worker (`?physics=inline` — на главном
+потоке). Для SharedArrayBuffer хостинг должен отдавать COOP/COEP-заголовки
+(см. `vite.config.ts`), иначе используется фолбэк через transferable.
 
 Документация: [архитектура](docs/ARCHITECTURE.md) · [план](docs/PLAN.md) · [стиль](docs/STYLE.md).

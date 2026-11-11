@@ -1,7 +1,7 @@
 /** Service tokens + global event map. The contract between plugins. */
 import { token } from '../core/kernel.ts'
 import type { FixedStepLoop } from '../core/loop.ts'
-import type { PhysicsWorld } from '../physics/softbody/world.ts'
+import type { PhysicsHost } from '../sim/host.ts'
 import type { Vehicle, VehicleTelemetry } from '../vehicles/runtime.ts'
 import type { InputMapper } from '../input/input.ts'
 import type { AudioService } from '../audio/audio.ts'
@@ -26,11 +26,15 @@ export interface Telemetry extends VehicleTelemetry {
   camera: CameraMode
   drawCalls: number
   triangles: number
+  /** e.g. "worker · shared", "inline · direct" */
+  physicsMode: string
+  stepsPerSec: number
+  latencyMs: number
 }
 
 export const T = {
   loop: token<FixedStepLoop>('loop'),
-  world: token<PhysicsWorld>('world'),
+  sim: token<PhysicsHost>('sim'),
   vehicle: token<Vehicle>('vehicle'),
   input: token<InputMapper>('input'),
   audio: token<AudioService>('audio'),
