@@ -17,6 +17,8 @@ import { VehicleEffects, tyreSmokeIntensity } from '../render/effects.ts'
 import { newTelemetry } from '../vehicles/runtime.ts'
 import { wallMs } from '../sim/protocol.ts'
 import type { PhysicsHost } from '../sim/host.ts'
+import type { World } from '../world/map.ts'
+import { WorldView } from '../render/worldView.ts'
 import { T, type GameEvents, type Telemetry } from './tokens.ts'
 
 type P = Plugin<GameEvents>
@@ -30,10 +32,11 @@ export const isTextField = (t: EventTarget | null): boolean =>
   (t instanceof HTMLInputElement && !NON_TEXT_INPUTS.has(t.type)) ||
   (t instanceof HTMLElement && t.isContentEditable)
 
-export const simPlugin = (host: PhysicsHost): P => ({
+export const simPlugin = (host: PhysicsHost, world: World): P => ({
   id: 'sim',
   setup(ctx) {
     ctx.provide(T.sim, host)
+    ctx.provide(T.world, world)
     ctx.provide(T.vehicle, host.vehicle)
     const off = host.onImpact((strength) => ctx.events.emit('impact', { strength }))
     ctx.events.on('ui:pause', (p) => host.setPaused(p))
@@ -158,6 +161,8 @@ export const renderPlugin = (opts: RenderOptions): P => ({
     ctx.provide(T.render, render)
     const host = ctx.get(T.sim)
     const v = host.vehicle
+    const worldView = new WorldView(ctx.get(T.world), render.renderer.capabilities.getMaxAnisotropy())
+    render.scene.add(worldView.root)
     const view = new VehicleView(v.def, v.vb)
     render.scene.add(view.root)
     ctx.provide(T.vehicleView, view)
@@ -176,7 +181,7 @@ export const renderPlugin = (opts: RenderOptions): P => ({
       update(_alpha, frameDt) {
         rig.update(v.frame, frameDt, pose)
         render.applyPose(pose)
-        render.env.follow(v.frame.px, 0, v.frame.pz)
+        render.env.follow(v.frame.px, v.frame.py, v.frame.pz)
       },
     })
     ctx.addSystem({
@@ -191,6 +196,7 @@ export const renderPlugin = (opts: RenderOptions): P => ({
       dispose: () => {
         offPointer()
         effects.dispose()
+        worldView.dispose()
         view.dispose()
         render.dispose()
       },

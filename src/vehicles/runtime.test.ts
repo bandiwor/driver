@@ -28,8 +28,9 @@ describe('Vehicle runtime', () => {
     expect(v.chassis.setup.camberLean[1]).toBeCloseTo((3 * Math.PI) / 180) // right wheel
     v.params.set('drive.split', 0.4)
     expect(v.chassis.driven(0)).toBe(true)
+    const k0 = v.body.spring[0]!
     v.params.set('body.stiffness', 2)
-    expect(v.body.spring[0]).toBeCloseTo(sedan.body.spring * 2)
+    expect(v.body.spring[0]).toBeCloseTo(k0 * 2)
   })
 
   it('starts in 1st (automatic) / neutral (manual) and resets', () => {

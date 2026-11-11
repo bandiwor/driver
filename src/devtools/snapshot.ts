@@ -8,7 +8,7 @@ import { Kernel } from '../core/kernel.ts'
 import { FixedStepLoop } from '../core/loop.ts'
 import { renderPlugin, simPlugin } from '../app/plugins.ts'
 import { InlineHost } from '../sim/host.ts'
-import { defaultSimConfig, newControls } from '../sim/simulation.ts'
+import { defaultSimConfig, newControls, worldFor } from '../sim/simulation.ts'
 import type { DriverControls } from '../input/input.ts'
 import { T, type GameEvents } from '../app/tokens.ts'
 import { newTelemetry } from '../vehicles/runtime.ts'
@@ -21,6 +21,8 @@ export interface SnapshotParams {
   w: number
   h: number
   beams: boolean
+  map: string
+  spawn: string
 }
 
 export function parseSnapshotParams(q: URLSearchParams): SnapshotParams {
@@ -37,6 +39,8 @@ export function parseSnapshotParams(q: URLSearchParams): SnapshotParams {
     w: num('w', 1280),
     h: num('h', 720),
     beams: q.get('beams') === '1',
+    map: q.get('map') ?? 'flat',
+    spawn: q.get('spawn') ?? 'start',
   }
 }
 
@@ -46,6 +50,8 @@ export interface SnapshotApi {
   /** Hold driver controls (throttle/brake/steer/handbrake/clutch) for `seconds`, then render. */
   drive(controls: Partial<DriverControls>, seconds: number): void
   setBeams(on: boolean): void
+  /** Crash-test style: give the whole car a forward speed (km/h) instantly. */
+  launch(kmh: number): void
   /** Set any tuning param (e.g. 'turbo.enabled', 'fuel.lambda'). */
   setParam(id: string, value: number): void
   /** Arbitrary per-node impulse for deformation tests: (nodeIndex, vx, vy, vz). */
@@ -69,8 +75,9 @@ export async function runSnapshot(canvas: HTMLCanvasElement, p: SnapshotParams):
   const loop = new FixedStepLoop({ step: (dt) => k.fixedUpdate(dt), render: (a, f) => k.update(a, f) }, { stepHz: 120, maxStepsPerFrame: 8 })
   k.provide(T.loop, loop)
   // Snapshots are deterministic: physics always inline, stepped by loop.simulate().
-  const host = new InlineHost(defaultSimConfig(p.vehicle))
-  await k.use(simPlugin(host), renderPlugin({ canvas, snapshot: { width: p.w, height: p.h } }))
+  const cfg = defaultSimConfig(p.vehicle, p.map, p.spawn)
+  const host = new InlineHost(cfg)
+  await k.use(simPlugin(host, worldFor(cfg.map)), renderPlugin({ canvas, snapshot: { width: p.w, height: p.h } }))
   const v = host.vehicle
   const controls = newControls()
   const r = k.get(T.render)
@@ -104,6 +111,15 @@ export async function runSnapshot(canvas: HTMLCanvasElement, p: SnapshotParams):
       }
       api.render()
     },
+    launch(kmh) {
+      const b = v.body
+      const f = v.frame
+      for (let n = 0; n < b.nodeCount; n++) {
+        b.vel[n * 3] = (f.fx * kmh) / 3.6
+        b.vel[n * 3 + 2] = (f.fz * kmh) / 3.6
+      }
+      for (const w of v.wheels) w.omega = kmh / 3.6 / v.def.tyre.radius
+    },
     setParam(id, value) {
       v.params.set(id, value)
     },
@@ -114,8 +130,12 @@ export async function runSnapshot(canvas: HTMLCanvasElement, p: SnapshotParams):
       view.update(v.body.pos, 1, v.frame, v.wheels)
       snapPose(current, v.frame, rig.opts, pose)
       r.applyPose(pose)
-      r.env.follow(v.frame.px, 0, v.frame.pz)
+      r.env.follow(v.frame.px, v.frame.py, v.frame.pz)
+      // The overview looks through hundreds of metres: no fog for it.
+      const fog = r.scene.fog
+      if (current === 'map') r.scene.fog = null
       r.render()
+      r.scene.fog = fog
       document.documentElement.dataset['snap'] = 'ready'
     },
     debug: () => ({ pose: structuredClone(pose), frame: { ...v.frame }, eye: rig.opts.eye, cam: r.camera.position.toArray() }),

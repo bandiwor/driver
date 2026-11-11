@@ -10,7 +10,7 @@
  *   5. aerodynamic drag distributed over all nodes
  * Allocation-free: all scratch lives in typed arrays created once.
  */
-import type { SoftBody } from '../physics/softbody/softbody.ts'
+import { BeamFlag, type SoftBody } from '../physics/softbody/softbody.ts'
 import type { BodyFrame } from '../physics/softbody/frame.ts'
 import { newGroundSample, type Ground } from '../physics/softbody/ground.ts'
 import type { SubstepHook } from '../physics/softbody/world.ts'
@@ -36,7 +36,7 @@ const V0_LAT = 3
  * any unsprung mass, without per-car tuning.
  */
 const STABILITY = 2
-const STRIDE = 13
+const STRIDE = 15
 /** Slip-ratio step for the numerical tyre slope. */
 const SLOPE_EPS = 0.01
 /** Reference brake bias at which WheelDef.brakeTorque is specified. */
@@ -55,6 +55,10 @@ export interface WheelState {
   fy: number
   /** Contact-patch sliding speed |(ωR − vx, vy)|, m/s (smoke / squeal). */
   slipSpeed: number
+  /** Surface index under the tyre (world/surfaces.ts). */
+  surface: number
+  /** Both lower arms broken → wheel torn off (no strut, no drive). */
+  detached: boolean
 }
 
 export const newWheelState = (): WheelState => ({
@@ -69,6 +73,8 @@ export const newWheelState = (): WheelState => ({
   fx: 0,
   fy: 0,
   slipSpeed: 0,
+  surface: 0,
+  detached: false,
 })
 
 /** Live-tunable chassis setup (derived from def + params). */
@@ -133,7 +139,9 @@ export class WheelSystem implements SubstepHook {
   readonly #vrel: Float64Array
   readonly #ax: Float64Array // fw(3) lat(3) N(3) vx camber mu v0Long → STRIDE
   readonly #gs = newGroundSample()
-  readonly #ti: TyreInput = { slipRatio: 0, slipAngle: 0, load: 0, nominalLoad: 0, surfaceMu: 1, camber: 0, pressure: 230 }
+  readonly #ti: TyreInput = { slipRatio: 0, slipAngle: 0, load: 0, nominalLoad: 0, surfaceMu: 1, camber: 0, pressure: 230, surfaceStiffness: 1 }
+  /** Drive shares from the setup (a torn-off wheel temporarily gets 0). */
+  readonly #share: Float64Array
   readonly #tf = { fx: 0, fy: 0 }
 
   constructor(
@@ -160,6 +168,7 @@ export class WheelSystem implements SubstepHook {
     this.#n = new Float64Array(n * 3)
     this.#vrel = new Float64Array(n)
     this.#ax = new Float64Array(n * STRIDE)
+    this.#share = new Float64Array(n)
     const pair = (axle: 'front' | 'rear'): [number, number] => {
       const l = def.wheels.findIndex((w) => w.axle === axle && w.x > 0)
       const r = def.wheels.findIndex((w) => w.axle === axle && w.x < 0)
@@ -241,7 +250,9 @@ export class WheelSystem implements SubstepHook {
     const split = Math.min(1, Math.max(0, s.frontSplit))
     const lockC = s.diffLock >= 0.999 ? Infinity : (600 * s.diffLock) / (1 - s.diffLock)
     this.#def.wheels.forEach((w, i) => {
-      this.#dl[i]!.share = (w.axle === 'front' ? split : 1 - split) / 2
+      const share = (w.axle === 'front' ? split : 1 - split) / 2
+      this.#share[i] = share
+      this.#dl[i]!.share = share
     })
     this.#axles[0]![2] = split > 0 ? lockC : 0
     this.#axles[1]![2] = split < 1 ? lockC : 0
@@ -293,10 +304,15 @@ export class WheelSystem implements SubstepHook {
     const tyre = def.tyre
     const R = tyre.radius
     const setup = this.setup
-    // Body lateral (left) axis = up × forward.
-    const lx = f.uy * f.fz - f.uz * f.fy
-    const ly = f.uz * f.fx - f.ux * f.fz
-    const lz = f.ux * f.fy - f.uy * f.fx
+    // ── 0. torn-off wheels (both lower arms broken) ─────────────
+    const flags = body.flags
+    for (let i = 0; i < nw; i++) {
+      const [a0, a1] = corners[i]!.arms
+      const off = (flags[a0]! & BeamFlag.Broken) !== 0 && (flags[a1]! & BeamFlag.Broken) !== 0
+      this.wheels[i]!.detached = off
+      // Halfshaft goes with the arms: no drive to a torn-off wheel.
+      this.#dl[i]!.share = off ? 0 : this.#share[i]!
+    }
 
     // ── 1. struts + anti-roll bars ─────────────────────────────
     for (let i = 0; i < nw; i++) {
@@ -316,9 +332,10 @@ export class WheelSystem implements SubstepHook {
       this.#n[i * 3 + 1] = ny
       this.#n[i * 3 + 2] = nz
       this.#vrel[i] = (vel[t3]! - vel[h3]!) * nx + (vel[t3 + 1]! - vel[h3 + 1]!) * ny + (vel[t3 + 2]! - vel[h3 + 2]!) * nz
-      this.wheels[i]!.compression = setup.struts[i]!.designLength - L
+      this.wheels[i]!.compression = this.wheels[i]!.detached ? 0 : setup.struts[i]!.designLength - L
     }
     for (let i = 0; i < nw; i++) {
+      if (this.wheels[i]!.detached) continue
       const F = strutForce(setup.struts[i]!, this.#len[i]!, this.#vrel[i]!) + this.#arb(i)
       const c = corners[i]!
       const h3 = c.hub * 3
@@ -359,12 +376,36 @@ export class WheelSystem implements SubstepHook {
       }
       w.contact = load > 0
       w.load = load
+      w.surface = gs.surface
+      // Wheel heading comes from the ACTUAL lower-arm hinge axis (pivotRear →
+      // pivotFront), not the ideal body frame: bent suspension after a crash
+      // misaligns the wheel and the car pulls — no special case needed.
+      const c = corners[i]!
+      const pf3 = c.pivotFront * 3
+      const pr3 = c.pivotRear * 3
+      let hx = pos[pf3]! - pos[pr3]!
+      let hy = pos[pf3 + 1]! - pos[pr3 + 1]!
+      let hz = pos[pf3 + 2]! - pos[pr3 + 2]!
+      const hl = Math.sqrt(hx * hx + hy * hy + hz * hz)
+      if (w.detached || hl < 1e-6) {
+        hx = f.fx
+        hy = f.fy
+        hz = f.fz
+      } else {
+        hx /= hl
+        hy /= hl
+        hz /= hl
+      }
+      // Left of the hinge = up × hinge.
+      const hlx = f.uy * hz - f.uz * hy
+      const hly = f.uz * hx - f.ux * hz
+      const hlz = f.ux * hy - f.uy * hx
       // Steered forward projected on the ground plane; lateral = N × fw.
       const cs = Math.cos(w.steer)
       const sn = Math.sin(w.steer)
-      let fwx = f.fx * cs + lx * sn
-      let fwy = f.fy * cs + ly * sn
-      let fwz = f.fz * cs + lz * sn
+      let fwx = hx * cs + hlx * sn
+      let fwy = hy * cs + hly * sn
+      let fwz = hz * cs + hlz * sn
       const fn = fwx * Nx + fwy * Ny + fwz * Nz
       fwx -= fn * Nx
       fwy -= fn * Ny
@@ -388,7 +429,7 @@ export class WheelSystem implements SubstepHook {
       const relax = Math.min(1, (h * Math.max(Math.abs(vx), v0Lat)) / tyre.relaxationLength)
       w.slipAngle += (slipAngle(vx, vy, v0Lat) - w.slipAngle) * relax
       const sr = slipRatio(dl.omega, R, vx, v0Long)
-      this.#tyreInput(i, sr, w.slipAngle, load, mu, camber)
+      this.#tyreInput(i, sr, w.slipAngle, load, mu, camber, gs.stiffness)
       tyreForces2(tyre, ti, tf)
       dl.fx = tf.fx
       // Implicit wheel needs the LOCAL slope dFx/dκ at the current slip (not the
@@ -402,7 +443,7 @@ export class WheelSystem implements SubstepHook {
         const slope = Math.max(0, (fp - fm) / (2 * SLOPE_EPS))
         dl.k = (slope * R * R) / Math.max(Math.abs(vx), v0Long)
       } else dl.k = 0
-      dl.brake = this.#brakeTorque(i)
+      dl.brake = w.detached ? 0 : this.#brakeTorque(i)
       const a = i * STRIDE
       ax[a] = fwx
       ax[a + 1] = fwy
@@ -417,6 +458,8 @@ export class WheelSystem implements SubstepHook {
       ax[a + 10] = camber
       ax[a + 11] = mu
       ax[a + 12] = v0Long
+      ax[a + 13] = gs.rolling
+      ax[a + 14] = gs.stiffness
     }
 
     // ── 3. driveline (implicit) ────────────────────────────────
@@ -458,9 +501,10 @@ export class WheelSystem implements SubstepHook {
       const vLat = Math.tan(w.slipAngle) * Math.max(Math.abs(vx), V0_LAT)
       w.slipSpeed = Math.hypot(dl.omega * R - vx, vLat)
       const sr = slipRatio(dl.omega, R, vx, v0Long)
-      this.#tyreInput(i, sr, w.slipAngle, w.load, ax[a + 11]!, ax[a + 10]!)
+      this.#tyreInput(i, sr, w.slipAngle, w.load, ax[a + 11]!, ax[a + 10]!, ax[a + 14]!)
       tyreForces2(tyre, ti, tf)
-      const Fx = tf.fx - tyre.rollingResistance * w.load * Math.tanh(vx * 2)
+      // Rolling resistance: tyre + surface (sand / mud sink and drag).
+      const Fx = tf.fx - (tyre.rollingResistance + ax[a + 13]!) * w.load * Math.tanh(vx * 2)
       const Fy = tf.fy
       w.fx = Fx
       w.fy = Fy
@@ -488,8 +532,9 @@ export class WheelSystem implements SubstepHook {
     }
   }
 
-  #tyreInput(i: number, sr: number, sa: number, load: number, mu: number, camber: number): void {
+  #tyreInput(i: number, sr: number, sa: number, load: number, mu: number, camber: number, stiffness: number): void {
     const ti = this.#ti
+    ti.surfaceStiffness = stiffness
     ti.slipRatio = sr
     ti.slipAngle = sa
     ti.load = load

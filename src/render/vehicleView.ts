@@ -10,6 +10,28 @@ import type { VehicleBody } from '../vehicles/build.ts'
 import type { VehicleDef } from '../vehicles/types.ts'
 import { buildSkin, SkinGroup } from './skin.ts'
 
+/** Edge stretch ratio at which a panel tears. */
+const TEAR = 1.6
+
+const edge = (p: Float32Array, a: number, b: number): number =>
+  Math.hypot(p[b]! - p[a]!, p[b + 1]! - p[a + 1]!, p[b + 2]! - p[a + 2]!)
+
+function edgeLengths(nodeOfVertex: Uint32Array, pos: Float64Array): Float32Array {
+  const n = nodeOfVertex.length / 3
+  const out = new Float32Array(n * 3)
+  const d = (i: number, j: number): number =>
+    Math.max(1e-3, Math.hypot(pos[j * 3]! - pos[i * 3]!, pos[j * 3 + 1]! - pos[i * 3 + 1]!, pos[j * 3 + 2]! - pos[i * 3 + 2]!))
+  for (let t = 0; t < n; t++) {
+    const a = nodeOfVertex[t * 3]!
+    const b = nodeOfVertex[t * 3 + 1]!
+    const c = nodeOfVertex[t * 3 + 2]!
+    out[t * 3] = d(a, b)
+    out[t * 3 + 1] = d(b, c)
+    out[t * 3 + 2] = d(c, a)
+  }
+  return out
+}
+
 const tmpM = new THREE.Matrix4()
 const tmpL = new THREE.Vector3()
 const tmpU = new THREE.Vector3()
@@ -28,6 +50,8 @@ export class VehicleView {
   readonly root = new THREE.Group()
   readonly #body: SoftBody
   readonly #nodeOfVertex: Uint32Array
+  /** Design edge lengths per triangle (3 per tri) for tear detection. */
+  readonly #edge0: Float32Array
   readonly #mesh: THREE.Mesh
   readonly #positions: Float32Array
   /** Per wheel: outer group = hub position + body orientation + steer; inner = spin. */
@@ -42,6 +66,7 @@ export class VehicleView {
     this.#wheelNodes = vb.wheelNodes
     const skin = buildSkin(vb.map, vb.body.pos)
     this.#nodeOfVertex = skin.nodeOfVertex
+    this.#edge0 = edgeLengths(skin.nodeOfVertex, vb.body.pos)
     const geo = new THREE.BufferGeometry()
     this.#positions = new Float32Array(skin.nodeOfVertex.length * 3)
     const posAttr = new THREE.BufferAttribute(this.#positions, 3)
@@ -130,6 +155,23 @@ export class VehicleView {
       out[o] = prev[k]! * ia + cur[k]! * alpha
       out[o + 1] = prev[k + 1]! * ia + cur[k + 1]! * alpha
       out[o + 2] = prev[k + 2]! * ia + cur[k + 2]! * alpha
+    }
+    // Torn panels: a triangle stretched far beyond its design edges collapses
+    // to a point (the skin "rips", leaving a hole where the beams failed).
+    const e0 = this.#edge0
+    for (let t = 0, nt = map.length / 3; t < nt; t++) {
+      const o = t * 9
+      const a = edge(out, o, o + 3)
+      const b = edge(out, o + 3, o + 6)
+      const c = edge(out, o + 6, o)
+      if (a > e0[t * 3]! * TEAR || b > e0[t * 3 + 1]! * TEAR || c > e0[t * 3 + 2]! * TEAR) {
+        out[o + 3] = out[o]!
+        out[o + 4] = out[o + 1]!
+        out[o + 5] = out[o + 2]!
+        out[o + 6] = out[o]!
+        out[o + 7] = out[o + 1]!
+        out[o + 8] = out[o + 2]!
+      }
     }
     const geo = this.#mesh.geometry
     geo.getAttribute('position').needsUpdate = true

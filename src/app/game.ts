@@ -3,7 +3,7 @@ import { Kernel, type Plugin } from '../core/kernel.ts'
 import { FixedStepLoop, rafScheduler } from '../core/loop.ts'
 import type { AudioService } from '../audio/audio.ts'
 import { InlineHost, WorkerHost, type PhysicsHost } from '../sim/host.ts'
-import { defaultSimConfig, type SimConfig } from '../sim/simulation.ts'
+import { defaultSimConfig, worldFor, type SimConfig } from '../sim/simulation.ts'
 import type { Endpoint } from '../sim/protocol.ts'
 import { audioPlugin, inputPlugin, renderPlugin, simPlugin, telemetryPlugin } from './plugins.ts'
 import { T, type GameEvents } from './tokens.ts'
@@ -13,6 +13,9 @@ export type PhysicsMode = 'worker' | 'inline'
 export interface GameOptions {
   canvas: HTMLCanvasElement
   vehicleId: string
+  /** Map id and spawn point (default: proving ground, start). */
+  map?: string
+  spawn?: string
   audio: AudioService
   /** Default 'worker' (falls back to inline if the worker cannot start). */
   physics?: PhysicsMode
@@ -51,7 +54,8 @@ export async function createPhysicsHost(cfg: SimConfig, mode: PhysicsMode): Prom
 }
 
 export async function createGame(o: GameOptions): Promise<Game> {
-  const cfg = defaultSimConfig(o.vehicleId)
+  const cfg = defaultSimConfig(o.vehicleId, o.map ?? 'proving', o.spawn ?? 'start')
+  const world = worldFor(cfg.map)
   const host = await createPhysicsHost(cfg, o.physics ?? 'worker')
   const kernel = new Kernel<GameEvents>()
   // Main loop: input smoothing + (inline) physics at the same fixed rate as the worker.
@@ -61,7 +65,7 @@ export async function createGame(o: GameOptions): Promise<Game> {
   )
   kernel.provide(T.loop, loop)
   await kernel.use(
-    simPlugin(host),
+    simPlugin(host, world),
     inputPlugin(window),
     renderPlugin({ canvas: o.canvas }),
     audioPlugin(o.audio),

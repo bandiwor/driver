@@ -14,6 +14,8 @@ export interface PauseMenuProps {
   onCamera: (m: CameraMode) => void
   onBeams: (on: boolean) => void
   onTransmission: (t: Transmission) => void
+  spawns: readonly { id: string; name: string }[]
+  onTeleport: (spawn: string) => void
 }
 
 export function PauseMenu(p: PauseMenuProps): JSX.Element {
@@ -48,6 +50,15 @@ export function PauseMenu(p: PauseMenuProps): JSX.Element {
           <p class="k-field-label">Коробка передач</p>
           <Segmented label="Коробка передач" options={TRANSMISSIONS} value={transmission.value} onChange={p.onTransmission} />
           <Toggle label="Показать балки (F3)" checked={showBeams.value} onChange={p.onBeams} />
+        </Panel>
+        <Panel title="Точки карты" icon="top">
+          <div class="k-stack">
+            {p.spawns.map((s) => (
+              <Button key={s.id} size="sm" icon="chevronRight" onClick={() => p.onTeleport(s.id)}>
+                {s.name}
+              </Button>
+            ))}
+          </div>
         </Panel>
         <Panel title="Управление" icon="keyboard">
           <ControlsList />

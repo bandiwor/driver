@@ -11,7 +11,7 @@
 import type { DriverControls } from '../input/input.ts'
 import { Vehicle, newTelemetry, type VehicleTelemetry } from '../vehicles/runtime.ts'
 import { getVehicle } from '../vehicles/registry.ts'
-import { Simulation, copyControls, impactStrength, type SimCommand, type SimConfig } from './simulation.ts'
+import { Simulation, copyControls, spawnPose, worldFor, type SimCommand, type SimConfig } from './simulation.ts'
 import { SnapshotSlot, layoutForVehicle, newMeta, type SnapshotLayout } from './snapshot.ts'
 import { TripleReader, initTripleCell } from './tripleBuffer.ts'
 import {
@@ -91,8 +91,8 @@ export class InlineHost extends HostBase implements PhysicsHost {
 
   fixedUpdate(): void {
     // The kernel loop already applies pause/timeScale and its own fixed dt.
-    const broken = this.sim.step()
-    if (broken > 0) this.emitImpact(impactStrength(broken))
+    const hit = this.sim.step()
+    if (hit > 0) this.emitImpact(hit)
   }
 
   sync(_now: number, loopAlpha: number): void {
@@ -159,7 +159,8 @@ export class WorkerHost extends HostBase implements PhysicsHost {
     this.#onDispose = o.onDispose
     this.transport = o.transport ?? (canShareMemory() ? 'shared' : 'transfer')
     // Shadow vehicle: same deterministic builder → same topology & node order.
-    this.vehicle = new Vehicle(getVehicle(cfg.vehicleId), cfg.spawn)
+    const world = worldFor(cfg.map)
+    this.vehicle = new Vehicle(getVehicle(cfg.vehicleId), spawnPose(world, cfg.spawn), world.heightfield)
     this.#L = layoutForVehicle(this.vehicle)
     this.#dtMs = 1000 / cfg.stepHz
     // UI edits the shadow's ParamStore; mirror them to the worker.

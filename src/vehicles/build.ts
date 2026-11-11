@@ -18,6 +18,8 @@ export interface CornerNodes {
   pivotFront: number
   pivotRear: number
   top: number
+  /** The two lower-arm beams; both broken → the wheel is torn off. */
+  arms: readonly [number, number]
 }
 
 export interface VehicleBody {
@@ -138,9 +140,9 @@ export function buildVehicleBody(def: VehicleDef, stiffness = 1): VehicleBody {
     b.addBeam(pivotFront, top, mountBeam)
     b.addBeam(pivotRear, top, mountBeam)
     const hub = b.addNode(w.x, w.y, w.z, { mass: def.wheelMass, friction: 0.6 })
-    b.addBeam(hub, pivotFront, armBeam)
-    b.addBeam(hub, pivotRear, armBeam)
-    out.push({ hub, pivotFront, pivotRear, top })
+    const armF = b.addBeam(hub, pivotFront, armBeam)
+    const armR = b.addBeam(hub, pivotRear, armBeam)
+    out.push({ hub, pivotFront, pivotRear, top, arms: [armF, armR] })
   }
   const st = lat.map.stations
   const side = (parity: 0 | 1): number[] => st.flatMap((s) => s.filter((n, r) => n >= 0 && r % 2 === parity))

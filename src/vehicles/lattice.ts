@@ -44,6 +44,18 @@ export function stationPoints(s: BodyStation): (readonly [number, number, number
 
 const valid = (s: readonly number[]): number[] => s.filter((i) => i >= 0)
 
+/**
+ * Default structural strength per station: crumple zones at the ends,
+ * a stiff safety cage where there is a roof, normal elsewhere.
+ */
+export function stationStrength(stations: readonly BodyStation[], i: number): number {
+  const s = stations[i]!
+  if (s.strength !== undefined) return s.strength
+  if (i === 0 || i === stations.length - 1) return 0.5
+  if (s.roofY !== undefined) return 1.6
+  return 0.85
+}
+
 export function buildLattice(stations: readonly BodyStation[], mat: BodyMaterial, targetMass?: number): Lattice {
   if (stations.length < 2) throw new Error('Need >= 2 stations')
   const b = new SoftBodyBuilder()
@@ -54,18 +66,24 @@ export function buildLattice(stations: readonly BodyStation[], mat: BodyMaterial
   for (const sp of pts) {
     map.push(sp.map((p) => (p ? b.addNode(p[0], p[1], p[2], { mass: nodeMass }) : -1)))
   }
-  const beam = { spring: mat.spring, damp: mat.damp, yieldStrain: mat.yieldStrain, breakStrain: mat.breakStrain }
+  // A beam is as strong as the weaker of the two sections it joins:
+  // softer and yielding earlier in crumple zones, stiffer in the cage.
+  const strength = stations.map((_, i) => stationStrength(stations, i))
+  const beam = (sa: number, sb: number) => {
+    const k = Math.min(strength[sa]!, strength[sb]!)
+    return { spring: mat.spring * k, damp: mat.damp * k, yieldStrain: mat.yieldStrain * k, breakStrain: mat.breakStrain }
+  }
   for (let s = 0; s < map.length; s++) {
     const cur = valid(map[s]!)
-    for (let i = 0; i < cur.length; i++) for (let j = i + 1; j < cur.length; j++) b.addBeam(cur[i]!, cur[j]!, beam)
+    for (let i = 0; i < cur.length; i++) for (let j = i + 1; j < cur.length; j++) b.addBeam(cur[i]!, cur[j]!, beam(s, s))
     const next = map[s + 1]
-    if (next) for (const a of cur) for (const c of valid(next)) b.addBeam(a, c, beam)
+    if (next) for (const a of cur) for (const c of valid(next)) b.addBeam(a, c, beam(s, s + 1))
     const skip = map[s + 2]
     if (skip) {
       for (let r = 0; r < 6; r++) {
         const a = map[s]![r]!
         const c = skip[r]!
-        if (a >= 0 && c >= 0) b.addBeam(a, c, beam)
+        if (a >= 0 && c >= 0) b.addBeam(a, c, beam(s, s + 2))
       }
     }
   }

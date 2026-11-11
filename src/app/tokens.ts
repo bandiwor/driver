@@ -9,6 +9,7 @@ import type { RenderService } from '../render/renderer.ts'
 import type { CameraRig, CameraMode } from '../render/cameraRig.ts'
 import type { VehicleView } from '../render/vehicleView.ts'
 import type { VehicleEffects } from '../render/effects.ts'
+import type { World } from '../world/map.ts'
 
 export type GameEvents = {
   'vehicle:spawned': Vehicle
@@ -37,6 +38,8 @@ export interface Telemetry extends VehicleTelemetry {
 export const T = {
   loop: token<FixedStepLoop>('loop'),
   sim: token<PhysicsHost>('sim'),
+  /** Compiled map (terrain + objects + spawns), same as the physics uses. */
+  world: token<World>('world'),
   vehicle: token<Vehicle>('vehicle'),
   input: token<InputMapper>('input'),
   audio: token<AudioService>('audio'),

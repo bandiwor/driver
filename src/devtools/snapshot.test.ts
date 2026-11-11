@@ -10,6 +10,8 @@ describe('parseSnapshotParams', () => {
       w: 1280,
       h: 720,
       beams: false,
+      map: 'flat',
+      spawn: 'start',
     })
   })
   it('parses values and rejects unknown views', () => {

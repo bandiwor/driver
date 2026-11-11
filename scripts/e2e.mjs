@@ -138,29 +138,37 @@ await step('free camera: mouse drag rotates, wheel zooms', async () => {
     await page.waitForTimeout(250)
   }
 })
-await step('manual gearbox: choose in pause, dump clutch → stall, starter, proper launch', async () => {
+await step('manual gearbox: choose in pause, pull away in 4th → stall, starter, proper launch', async () => {
   await page.keyboard.press('Escape')
   await page.getByRole('radio', { name: 'Механика' }).click()
   await page.getByRole('button', { name: /Продолжить/ }).click()
   await page.locator('.k-scrim').waitFor({ state: 'detached' })
   await page.keyboard.press('KeyR') // manual → neutral after reset
-  await page.waitForTimeout(500)
-  if ((await page.locator('svg[role=meter] .k-gauge__center').textContent()) !== 'N') throw new Error('manual should start in N')
+  await page.waitForFunction(() => document.querySelector('svg[role=meter] .k-gauge__center')?.textContent === 'N', null, {
+    timeout: 5000,
+  })
   // Gear without clutch → grind warning.
   await page.keyboard.press('KeyE')
   await page.locator('.k-alert--warn').waitFor()
-  // Clutch down, 1st, dump the clutch with no throttle → stall.
+  // Clutch down, straight into 4th, let the clutch out with no throttle → stall.
+  // (The keyboard clutch releases over ~0.9 s, like a careful foot, so 1st at
+  // idle may pull away — a high gear cannot.)
   await page.keyboard.down('ShiftLeft')
   await page.waitForTimeout(400)
-  await page.keyboard.press('KeyE')
-  await page.waitForTimeout(300)
+  for (let g = 0; g < 4; g++) {
+    await page.keyboard.press('KeyE')
+    await page.waitForTimeout(250)
+  }
   await page.keyboard.up('ShiftLeft')
   await page.locator('.k-alert--danger').waitFor({ timeout: 10_000 })
   await shot('manual-stalled')
-  // Clutch down, neutral, crank with I until it runs.
+  // Clutch down, back to neutral, crank with I until it runs.
   await page.keyboard.down('ShiftLeft')
   await page.waitForTimeout(300)
-  await page.keyboard.press('KeyQ')
+  for (let g = 0; g < 4; g++) {
+    await page.keyboard.press('KeyQ')
+    await page.waitForTimeout(150)
+  }
   await page.keyboard.down('KeyI')
   await page.locator('.k-alert--danger').waitFor({ state: 'detached', timeout: 10_000 })
   await page.keyboard.up('KeyI')
@@ -213,6 +221,22 @@ await step('pause menu', async () => {
   await page.locator('.k-scrim').waitFor({ state: 'detached' })
 })
 
+await step('map points: teleport to the crash zone and hit the wall (damage in HUD)', async () => {
+  await page.keyboard.press('Escape')
+  await page.getByRole('button', { name: 'Краш-зона' }).click()
+  await page.locator('.k-scrim').waitFor({ state: 'detached' })
+  await page.waitForTimeout(500)
+  await page.keyboard.down('KeyW')
+  await page.locator('.k-chip[title="Повреждение кузова"]', { hasNotText: /^0%$/ }).first().waitFor()
+  // Keep pushing until the body shows damage (wall is ~20 m ahead).
+  await page.waitForFunction(
+    () => Number(document.querySelector('.k-chip[title="Повреждение кузова"]')?.textContent?.replace('%', '') ?? 0) > 0,
+    null,
+    { timeout: 20_000 },
+  )
+  await page.keyboard.up('KeyW')
+  await shot('crash-zone')
+})
 await step('garage: switch to another car (pickup) and drive it', async () => {
   await page.keyboard.press('Escape')
   await page.getByRole('button', { name: 'В меню' }).click()

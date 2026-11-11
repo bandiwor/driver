@@ -51,6 +51,8 @@ export interface TyreInput {
   camber: number
   /** Inflation pressure, kPa. */
   pressure: number
+  /** Surface stiffness factor (loose gravel/sand < 1: softer, flatter slip curve). */
+  surfaceStiffness?: number
 }
 
 export interface TyreCoefs {
@@ -65,7 +67,7 @@ export function tyreCoefs(t: TyreSpec, i: TyreInput, out: TyreCoefs): TyreCoefs 
   // Pressure: stiffer carcass (higher B) but smaller patch away from nominal.
   const pressureGrip = 1 - 0.35 * (pr - 1) * (pr - 1)
   const camberGrip = 1 - 2 * i.camber * i.camber
-  out.B = t.B * Math.sqrt(pr)
+  out.B = t.B * Math.sqrt(pr) * (i.surfaceStiffness ?? 1)
   out.D = Math.max(0.05, t.D * (1 - t.loadSensitivity * (loadRatio - 1)) * pressureGrip * camberGrip) * i.surfaceMu
   return out
 }

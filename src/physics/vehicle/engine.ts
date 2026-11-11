@@ -53,7 +53,14 @@ export interface EngineState {
   catching: boolean
   /** Accumulated cranking time above crankRpm, s. */
   crankTimer: number
+  /**
+   * Mechanical health 0..1 (crash damage): scales combustion torque; below
+   * DEAD_HEALTH the engine cannot run or be started.
+   */
+  health: number
 }
+
+export const DEAD_HEALTH = 0.12
 
 export const newEngineState = (spec: EngineSpec): EngineState => ({
   omega: spec.idleRpm * RPM_TO_RADS,
@@ -64,6 +71,7 @@ export const newEngineState = (spec: EngineSpec): EngineState => ({
   running: true,
   catching: false,
   crankTimer: 0,
+  health: 1,
 })
 
 export const engineRpm = (s: EngineState): number => s.omega * RADS_TO_RPM
@@ -103,6 +111,11 @@ export function engineDrive(
 ): number {
   const rpm = engineRpm(s)
   // ── running / stalled state machine ──
+  const dead = s.health < DEAD_HEALTH
+  if (s.running && dead) {
+    s.running = false
+    s.catching = false
+  }
   if (s.running) {
     if (s.catching && rpm > spec.stallRpm * 1.15) s.catching = false
     const floor = s.catching ? spec.crankRpm * 0.6 : spec.stallRpm
@@ -113,7 +126,7 @@ export function engineDrive(
   } else {
     if (starter > 0.5 && rpm > spec.crankRpm) s.crankTimer += dt
     else if (starter <= 0.5) s.crankTimer = 0
-    if (s.crankTimer >= spec.crankTime || rpm > spec.pushStartRpm) {
+    if (!dead && (s.crankTimer >= spec.crankTime || rpm > spec.pushStartRpm)) {
       s.running = true
       s.catching = true
       s.crankTimer = 0
@@ -139,7 +152,7 @@ export function engineDrive(
   s.throttle = thr
   // Combustion: the module pipeline (intake/fuel/ignition/exhaust) when
   // present, else the plain torque map × throttle.
-  const combustion = pipeline ? pipeline.run(spec, rpm, thr, pedal, true, dt) : sample(spec.torqueCurve, rpm) * thr
+  const combustion = (pipeline ? pipeline.run(spec, rpm, thr, pedal, true, dt) : sample(spec.torqueCurve, rpm) * thr) * s.health
   const t = combustion - engineLosses(spec, rpm, thr) + cranking
   s.torque = t
   const full = sample(spec.torqueCurve, rpm)

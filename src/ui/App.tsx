@@ -5,7 +5,7 @@ import { createGame, type PhysicsMode } from '../app/game.ts'
 import { WebAudio, type AudioService } from '../audio/audio.ts'
 import { getVehicle, hasVehicle } from '../vehicles/registry.ts'
 import { voiceFor } from '../audio/dsp/engineSynth.ts'
-import { bindGame, paused, screen, transmission, tuningOpen, vehicleId, volume, type GameBridge, type Transmission } from './store.ts'
+import { bindGame, mapId, paused, screen, transmission, tuningOpen, vehicleId, volume, type GameBridge, type Transmission } from './store.ts'
 import { MainMenu } from './screens/MainMenu.tsx'
 import { Hud } from './screens/Hud.tsx'
 import { TuningPanel } from './screens/TuningPanel.tsx'
@@ -34,12 +34,13 @@ export function App({ canvas, vehicleId: initialVehicle, physics }: AppProps): J
 
   const start = async (): Promise<void> => {
     const id = vehicleId.value
-    if (bridge && bridge.vehicleId === id) {
+    const map = mapId.value
+    if (bridge && bridge.vehicleId === id && bridge.mapId === map) {
       screen.value = 'drive'
       bridge.setPaused(false)
       return
     }
-    // A different car: tear down the old game + audio graph, build a new one.
+    // A different car or map: tear down the old game + audio graph, build a new one.
     if (bridge) {
       bridge.dispose()
       bridge.game.dispose()
@@ -54,7 +55,7 @@ export function App({ canvas, vehicleId: initialVehicle, physics }: AppProps): J
       (e: unknown) => console.warn('Audio unavailable', e),
     )
     sound.setMasterVolume(volume.value)
-    const game = await createGame({ canvas, vehicleId: id, audio: sound, physics })
+    const game = await createGame({ canvas, vehicleId: id, map, audio: sound, physics })
     const b = bindGame(game)
     setBridge(b)
     game.start()
@@ -74,6 +75,7 @@ export function App({ canvas, vehicleId: initialVehicle, physics }: AppProps): J
         onStart={() => void start()}
         onTransmission={setTransmission}
         onVehicle={(id) => (vehicleId.value = id)}
+        onMap={(id) => (mapId.value = id)}
         loading={loading}
       />
     )
@@ -104,6 +106,11 @@ export function App({ canvas, vehicleId: initialVehicle, physics }: AppProps): J
           onCamera={(m) => bridge.setCamera(m)}
           onBeams={(on) => bridge.setBeams(on)}
           onTransmission={setTransmission}
+          spawns={bridge.spawns}
+          onTeleport={(sp) => {
+            bridge.teleport(sp)
+            bridge.setPaused(false)
+          }}
         />
       )}
     </>

@@ -7,7 +7,7 @@
  * it for low-latency commands — then yields to the event loop through a
  * MessageChannel (no 4 ms setTimeout clamping) so queued messages are handled.
  */
-import { Simulation, impactStrength } from './simulation.ts'
+import { Simulation } from './simulation.ts'
 import { SnapshotSlot, layoutForVehicle, type SnapshotLayout } from './snapshot.ts'
 import { TripleWriter } from './tripleBuffer.ts'
 import { newTelemetry } from '../vehicles/runtime.ts'
@@ -147,8 +147,8 @@ export class SimServer {
     const sim = this.#sim
     if (!sim) return
     if (this.#controls) readControls(this.#controls, sim.controls)
-    const broken = sim.step()
-    if (broken > 0) this.#pendingImpact = Math.max(this.#pendingImpact, impactStrength(broken))
+    const hit = sim.step()
+    if (hit > 0) this.#pendingImpact = Math.max(this.#pendingImpact, hit)
   }
 
   #publish(): void {

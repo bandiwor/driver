@@ -14,7 +14,7 @@ import { localToWorld, type BodyFrame } from '../physics/softbody/frame.ts'
 export const CAMERA_MODES = ['chase', 'cockpit', 'top', 'free'] as const
 export type CameraMode = (typeof CAMERA_MODES)[number]
 
-export const SNAP_VIEWS = ['front', 'back', 'left', 'right', 'top', 'iso', 'iso-rear', 'cockpit', 'chase'] as const
+export const SNAP_VIEWS = ['front', 'back', 'left', 'right', 'top', 'iso', 'iso-rear', 'cockpit', 'chase', 'map'] as const
 export type SnapView = (typeof SNAP_VIEWS)[number]
 
 export interface CameraPose {
@@ -189,7 +189,7 @@ const setV = (v: [number, number, number], x: number, y: number, z: number): voi
 /** Deterministic presets for snapshot / visual testing. */
 export function snapPose(view: SnapView, f: BodyFrame, rig: RigOptions, out: CameraPose): CameraPose {
   const d = 6.5
-  const presets: Record<Exclude<SnapView, 'cockpit' | 'chase'>, readonly [number, number, number]> = {
+  const presets: Record<Exclude<SnapView, 'cockpit' | 'chase' | 'map'>, readonly [number, number, number]> = {
     front: [0, 0.6, d],
     back: [0, 0.6, -d],
     left: [d, 0.6, 0],
@@ -197,6 +197,14 @@ export function snapPose(view: SnapView, f: BodyFrame, rig: RigOptions, out: Cam
     top: [0, 9, 0.001],
     iso: [d * 0.75, d * 0.55, d * 0.75],
     'iso-rear': [-d * 0.75, d * 0.55, -d * 0.75],
+  }
+  if (view === 'map') {
+    // Whole-map overview: high above the origin looking down; +x right, +z down (map convention).
+    setV(out.pos, 0, 520, 0.01)
+    setV(out.target, 0, 0, 0)
+    setV(out.up, 0, 0, -1)
+    out.fov = 48
+    return out
   }
   if (view === 'cockpit' || view === 'chase') {
     const r = new CameraRig(rig)

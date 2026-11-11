@@ -1,7 +1,8 @@
 import type { JSX } from 'preact'
 import { Button, Kbd, Panel, Segmented } from '../kit/kit.tsx'
 import { getVehicle } from '../../vehicles/registry.ts'
-import { transmission, vehicleId, type Transmission } from '../store.ts'
+import { mapId, transmission, vehicleId, type Transmission } from '../store.ts'
+import { listMaps } from '../../world/maps/registry.ts'
 import { GarageList, VehicleSheet } from './Garage.tsx'
 
 export const TRANSMISSIONS: readonly { id: Transmission; label: string }[] = [
@@ -48,10 +49,13 @@ export interface MainMenuProps {
   onStart: () => void
   onTransmission: (t: Transmission) => void
   onVehicle: (id: string) => void
+  onMap: (id: string) => void
   loading: boolean
 }
 
-export function MainMenu({ onStart, onTransmission, onVehicle, loading }: MainMenuProps): JSX.Element {
+export function MainMenu({ onStart, onTransmission, onVehicle, onMap, loading }: MainMenuProps): JSX.Element {
+  const maps = listMaps()
+  const map = maps.find((m) => m.id === mapId.value) ?? maps[0]
   const car = getVehicle(vehicleId.value)
   return (
     <div class="k-menu k-menu--garage">
@@ -73,6 +77,9 @@ export function MainMenu({ onStart, onTransmission, onVehicle, loading }: MainMe
         </Panel>
         <Panel title={car.name} icon="engine">
           <VehicleSheet def={car} />
+          <p class="k-field-label">Карта</p>
+          <Segmented label="Карта" options={maps.map((m) => ({ id: m.id, label: m.name }))} value={map?.id ?? ''} onChange={onMap} />
+          <p class="k-muted">{map?.description}</p>
           <p class="k-field-label">Коробка передач</p>
           <Segmented label="Коробка передач" options={TRANSMISSIONS} value={transmission.value} onChange={onTransmission} />
           <p class="k-muted k-hint">{TRANSMISSION_HINT[transmission.value]}</p>

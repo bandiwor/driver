@@ -43,12 +43,18 @@ export function Hud({ redline, maxRpm }: { redline: number; maxRpm: number }): J
   const manual = !tel.automatic.value
   return (
     <div class="k-hud">
-      {(!tel.running.value || tel.grind.value) && (
+      {(!tel.running.value || tel.grind.value || tel.engineHealth.value < 0.12) && (
         <div class="k-alerts" role="status">
-          {!tel.running.value && (
+          {!tel.running.value && tel.engineHealth.value >= 0.12 && (
             <span class="k-alert k-alert--danger">
               <Icon name="key" size={18} />
               Двигатель заглох — удерживайте <Kbd>I</Kbd>
+            </span>
+          )}
+          {tel.engineHealth.value < 0.12 && (
+            <span class="k-alert k-alert--danger">
+              <Icon name="engine" size={18} />
+              Двигатель разбит — ремонт <Kbd>R</Kbd>
             </span>
           )}
           {tel.grind.value && (
@@ -82,10 +88,21 @@ export function Hud({ redline, maxRpm }: { redline: number; maxRpm: number }): J
         </span>
         {manual && <ClutchMeter engagement={tel.clutch.value} />}
         {tel.turbo.value && <BoostMeter boost={tel.boost.value} />}
-        <span class={`k-chip ${dmg > 30 ? 'k-chip--danger' : dmg > 5 ? 'k-chip--warn' : ''}`}>
+        <span class={`k-chip ${dmg > 30 ? 'k-chip--danger' : dmg > 5 ? 'k-chip--warn' : ''}`} title="Повреждение кузова">
           <Icon name="body" size={16} />
           {dmg.toFixed(0)}%
         </span>
+        {tel.engineHealth.value < 0.98 && (
+          <span class={`k-chip ${tel.engineHealth.value < 0.4 ? 'k-chip--danger' : 'k-chip--warn'}`} title="Состояние двигателя">
+            <Icon name="engine" size={16} />
+            {Math.round(tel.engineHealth.value * 100)}%
+          </span>
+        )}
+        {tel.wheelsOff.value > 0 && (
+          <span class="k-chip k-chip--danger" title="Оторвано колёс">
+            <Icon name="wheel" size={16} />−{tel.wheelsOff.value}
+          </span>
+        )}
       </div>
       {debugOverlay.value && (
         <pre class="k-debug">

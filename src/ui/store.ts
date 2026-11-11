@@ -20,8 +20,9 @@ export const cameraMode = signal<CameraMode>('chase')
 export const volume = signal(0.7)
 export const showBeams = signal(false)
 
-/** Selected vehicle (garage). */
+/** Selected vehicle (garage) and map. */
 export const vehicleId = signal('k1-sedan')
+export const mapId = signal('proving')
 
 export type Transmission = 'auto' | 'manual'
 /** Chosen in the main menu; mirrored from the vehicle's `gear.auto` param. */
@@ -42,6 +43,8 @@ export const tel = {
   lambda: signal(0.88),
   egt: signal(0),
   particles: signal(0),
+  engineHealth: signal(1),
+  wheelsOff: signal(0),
   fps: signal(0),
   physicsMs: signal(0),
   drawCalls: signal(0),
@@ -58,6 +61,9 @@ export const paramsVersion = signal(0)
 export interface GameBridge {
   game: Game
   vehicleId: string
+  mapId: string
+  spawns: readonly { id: string; name: string }[]
+  teleport(spawn: string): void
   params: ParamStore
   redline: number
   maxRpm: number
@@ -103,6 +109,8 @@ export function bindGame(game: Game, sampleHz = 15): GameBridge {
       tel.lambda.value = Math.round(t.lambda * 100) / 100
       tel.egt.value = Math.round(t.egt / 10) * 10
       tel.particles.value = t.particles
+      tel.engineHealth.value = Math.round(t.engineHealth * 100) / 100
+      tel.wheelsOff.value = t.wheelsOff
       tel.fps.value = Math.round(t.fps)
       tel.physicsMs.value = Math.round(t.physicsMs * 100) / 100
       tel.drawCalls.value = t.drawCalls
@@ -115,6 +123,12 @@ export function bindGame(game: Game, sampleHz = 15): GameBridge {
   return {
     game,
     vehicleId: v.def.id,
+    mapId: k.get(T.world).map.id,
+    spawns: k.get(T.world).map.spawns,
+    teleport(spawn) {
+      host.command({ type: 'teleport', spawn })
+      k.events.emit('vehicle:reset', v)
+    },
     params: v.params,
     redline: v.engineSpec.redlineRpm,
     maxRpm: Math.ceil((v.engineSpec.limiterRpm + 1000) / 1000) * 1000,

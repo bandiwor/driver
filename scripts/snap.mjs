@@ -7,6 +7,8 @@
  *   npm run snap -- --drive=throttle:1,steer:0.6 --drive-t=2   # drive a scenario, then shoot
  *   npm run snap -- --param=turbo.enabled:1,fuel.lambda:0.72 \
  *        --drive=throttle:1@3 --drive=throttle:0@0.25           # chained steps "controls@seconds"
+ *   npm run snap -- --map=proving --spawn=crash --views=map,iso   # any map / spawn point
+ *   npm run snap -- --map=proving --spawn=crash --launch=70 --drive=brake:0@1.5 --beams  # crash test
  *   npm run snap -- --url=http://localhost:5173   # use an already running server
  * Output: snapshots/<vehicle>-<view>[-beams].png
  */
@@ -16,10 +18,12 @@ import { resolve } from 'node:path'
 import { parseArgs } from 'node:util'
 import { chromium } from 'playwright'
 
-const ALL = ['front', 'back', 'left', 'right', 'top', 'iso', 'iso-rear', 'cockpit', 'chase']
+const ALL = ['front', 'back', 'left', 'right', 'top', 'iso', 'iso-rear', 'cockpit', 'chase', 'map']
 const { values: a } = parseArgs({
   options: {
     vehicle: { type: 'string', default: 'k1-sedan' },
+    map: { type: 'string', default: 'flat' },
+    spawn: { type: 'string', default: 'start' },
     views: { type: 'string', default: ALL.join(',') },
     t: { type: 'string', default: '1.5' },
     w: { type: 'string', default: '1280' },
@@ -29,6 +33,7 @@ const { values: a } = parseArgs({
     after: { type: 'string', default: '1' },
     drive: { type: 'string', multiple: true, default: [] },
     param: { type: 'string' },
+    launch: { type: 'string' },
     'drive-t': { type: 'string', default: '2' },
     tag: { type: 'string', default: '' },
     out: { type: 'string', default: 'snapshots' },
@@ -57,7 +62,7 @@ const page = await browser.newPage({ viewport: { width: Number(a.w), height: Num
 page.on('pageerror', (e) => console.error('[page]', e.message))
 page.on('console', (m) => m.type() === 'error' && console.error('[console]', m.text()))
 
-const q = new URLSearchParams({ snap: '', vehicle: a.vehicle, view: 'iso', t: a.t, w: a.w, h: a.h, beams: a.beams ? '1' : '0' })
+const q = new URLSearchParams({ snap: '', vehicle: a.vehicle, map: a.map, spawn: a.spawn, view: 'iso', t: a.t, w: a.w, h: a.h, beams: a.beams ? '1' : '0' })
 await page.goto(new URL(`?${q}`, base).toString())
 await page.waitForFunction(() => document.documentElement.dataset.snap === 'ready', null, { timeout: 60_000 })
 
@@ -70,6 +75,7 @@ const kv = (s) => Object.fromEntries(s.split(',').filter(Boolean).map((p) => p.s
 if (a.param) {
   for (const [id, v] of Object.entries(kv(a.param))) await page.evaluate(([i, x]) => window.__kuzov.setParam(i, x), [id, v])
 }
+if (a.launch) await page.evaluate((k) => window.__kuzov.launch(k), Number(a.launch))
 for (const step of a.drive) {
   const [controls, secs] = step.split('@')
   await page.evaluate(([c, s]) => window.__kuzov.drive(c, s), [kv(controls), Number(secs ?? a['drive-t'])])
@@ -79,7 +85,8 @@ const files = []
 for (const view of a.views.split(',').map((s) => s.trim()).filter(Boolean)) {
   if (!ALL.includes(view)) throw new Error(`Unknown view ${view}`)
   await page.evaluate((v) => window.__kuzov.setView(v), view)
-  const file = resolve(outDir, `${a.vehicle}-${view}${a.beams ? '-beams' : ''}${a.tag ? `-${a.tag}` : ''}.png`)
+  const prefix = a.map === 'flat' ? a.vehicle : `${a.map}-${a.spawn}-${a.vehicle}`
+  const file = resolve(outDir, `${prefix}-${view}${a.beams ? '-beams' : ''}${a.tag ? `-${a.tag}` : ''}.png`)
   await page.locator('#viewport').screenshot({ path: file })
   files.push(file)
 }

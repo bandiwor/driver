@@ -7,7 +7,8 @@
  *   f32 scalars [telemetry …, frame (12)]
  *   f32 pos     nodes·3   — state after the last step
  *   f32 prev    nodes·3   — state before the last step (render interpolation)
- *   f32 wheels  wheels·8  — ω, spin angle, steer, load, slip ratio, slip angle, compression, contact
+ *   f32 wheels  wheels·11 — ω, spin angle, steer, load, slip ratio, slip angle, compression,
+ *                           contact, slip speed, surface, detached
  *   u8  flags   beams     — beam flags (broken bits)
  *
  * Views are created once per slot; reading/writing allocates nothing.
@@ -39,12 +40,14 @@ export const S = {
   smoke: 30,
   soot: 31,
   afterfireStrength: 32,
+  engineHealth: 33,
+  wheelsOff: 34,
   count: 36,
 } as const
 
 const FRAME_KEYS = ['px', 'py', 'pz', 'fx', 'fy', 'fz', 'ux', 'uy', 'uz', 'vx', 'vy', 'vz'] as const satisfies readonly (keyof BodyFrame)[]
 
-export const WHEEL_FLOATS = 9
+export const WHEEL_FLOATS = 11
 const HEAD = 5
 
 export interface SnapshotLayout {
@@ -133,6 +136,8 @@ export class SnapshotSlot {
     s[S.smoke] = tel.smoke
     s[S.soot] = tel.soot
     s[S.afterfireStrength] = tel.afterfireStrength
+    s[S.engineHealth] = tel.engineHealth
+    s[S.wheelsOff] = tel.wheelsOff
     const f = v.frame
     for (let i = 0; i < 12; i++) s[S.frame + i] = f[FRAME_KEYS[i]!]
     this.pos.set(v.body.pos)
@@ -152,6 +157,8 @@ export class SnapshotSlot {
       wf[o + 6] = w.compression
       wf[o + 7] = w.contact ? 1 : 0
       wf[o + 8] = w.slipSpeed
+      wf[o + 9] = w.surface
+      wf[o + 10] = w.detached ? 1 : 0
     }
   }
 
@@ -182,6 +189,8 @@ export class SnapshotSlot {
     tel.smoke = s[S.smoke]!
     tel.soot = s[S.soot]!
     tel.afterfireStrength = s[S.afterfireStrength]!
+    tel.engineHealth = s[S.engineHealth]!
+    tel.wheelsOff = s[S.wheelsOff]!
     tel.afterfires = this.head[3]!
     tel.blowOffs = this.head[4]!
     const f = v.frame
@@ -203,6 +212,8 @@ export class SnapshotSlot {
       w.compression = wf[o + 6]!
       w.contact = wf[o + 7]! > 0.5
       w.slipSpeed = wf[o + 8]!
+      w.surface = wf[o + 9]!
+      w.detached = wf[o + 10]! > 0.5
     }
   }
 }

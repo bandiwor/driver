@@ -4,7 +4,7 @@
  * Hooks let vehicle systems inject forces each substep (wheels, engine, aero).
  */
 import type { SoftBody } from './softbody.ts'
-import type { Ground } from './ground.ts'
+import type { Ground, StaticColliders } from './ground.ts'
 import { defaultSolverConfig, newStepStats, substep, type SolverConfig, type StepStats } from './solver.ts'
 
 export interface SubstepHook {
@@ -22,6 +22,7 @@ export class PhysicsWorld {
   readonly cfg: WorldConfig
   readonly stats: StepStats = newStepStats()
   time = 0
+  colliders: StaticColliders | null = null
 
   constructor(
     public ground: Ground,
@@ -46,9 +47,10 @@ export class PhysicsWorld {
     this.stats.broken = 0
     this.stats.yielded = 0
     this.stats.contacts = 0
+    this.stats.impact = 0
     for (let s = 0; s < n; s++) {
       for (const hook of this.hooks) hook.preSubstep(h)
-      for (const b of this.bodies) substep(b, h, this.cfg, this.ground, this.stats)
+      for (const b of this.bodies) substep(b, h, this.cfg, this.ground, this.stats, this.colliders)
     }
     this.time += dt
   }

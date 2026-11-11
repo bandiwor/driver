@@ -8,7 +8,7 @@
  * Allocation-free. Hand-inlined index math on purpose (hot loop).
  */
 import { BeamFlag, type SoftBody } from './softbody.ts'
-import { newGroundSample, type Ground } from './ground.ts'
+import { newGroundSample, type Ground, type StaticColliders } from './ground.ts'
 
 export interface SolverConfig {
   gravity: number // m/s², positive = down
@@ -23,6 +23,8 @@ export interface StepStats {
   broken: number
   yielded: number
   contacts: number
+  /** Strongest inward contact speed this step (ground or obstacle), m/s. */
+  impact: number
 }
 
 const gs = newGroundSample()
@@ -79,7 +81,14 @@ export function computeBeamForces(b: SoftBody, stats: StepStats): void {
   }
 }
 
-export function integrate(b: SoftBody, dt: number, cfg: SolverConfig, ground: Ground, stats: StepStats): void {
+export function integrate(
+  b: SoftBody,
+  dt: number,
+  cfg: SolverConfig,
+  ground: Ground,
+  stats: StepStats,
+  colliders: StaticColliders | null = null,
+): void {
   const { pos, vel, force, invMass, nodeFriction } = b
   const drag = Math.max(0, 1 - cfg.linearDrag * dt)
   const g = cfg.gravity
@@ -103,6 +112,7 @@ export function integrate(b: SoftBody, dt: number, cfg: SolverConfig, ground: Gr
       z += gs.nz * depth * gs.ny
       const vn = vx * gs.nx + vy * gs.ny + vz * gs.nz
       if (vn < 0) {
+        if (-vn > stats.impact) stats.impact = -vn
         // Remove normal velocity (+restitution) and apply Coulomb friction.
         const jn = -vn * (1 + cfg.restitution)
         vx += jn * gs.nx
@@ -131,16 +141,27 @@ export function integrate(b: SoftBody, dt: number, cfg: SolverConfig, ground: Gr
     force[i3] = 0
     force[i3 + 1] = 0
     force[i3 + 2] = 0
+    if (colliders) {
+      const hit = colliders.collide(pos, vel, i3, nodeFriction[i]!)
+      if (hit > stats.impact) stats.impact = hit
+    }
   }
 }
 
 /** One substep. External forces may be accumulated into `b.force` before calling. */
-export function substep(b: SoftBody, dt: number, cfg: SolverConfig, ground: Ground, stats: StepStats): void {
+export function substep(
+  b: SoftBody,
+  dt: number,
+  cfg: SolverConfig,
+  ground: Ground,
+  stats: StepStats,
+  colliders: StaticColliders | null = null,
+): void {
   computeBeamForces(b, stats)
-  integrate(b, dt, cfg, ground, stats)
+  integrate(b, dt, cfg, ground, stats, colliders)
 }
 
-export const newStepStats = (): StepStats => ({ broken: 0, yielded: 0, contacts: 0 })
+export const newStepStats = (): StepStats => ({ broken: 0, yielded: 0, contacts: 0, impact: 0 })
 
 export const kineticEnergy = (b: SoftBody): number => {
   let e = 0

@@ -179,7 +179,11 @@
 }
 .k-pause {
   display: grid;
-  grid-template-columns: repeat(3, minmax(240px, 320px));
+  grid-template-columns: repeat(auto-fit, minmax(240px, 300px));
+  justify-content: center;
+  width: min(1320px, 100%);
+  max-height: 100%;
+  overflow-y: auto;
   gap: var(--k-s4);
   align-items: start;
   @media (--k-narrow) {

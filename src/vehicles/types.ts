@@ -18,6 +18,11 @@ export interface BodyStation {
   roofY?: number
   /** Roof half width (tumblehome). Defaults to 0.85·halfWidth. */
   roofHalfWidth?: number
+  /**
+   * Structural strength multiplier (spring and yield). Omitted → derived:
+   * end sections crumple (0.5), cabin (roofed) sections form a cage (1.6).
+   */
+  strength?: number
 }
 
 export interface BodyMaterial {

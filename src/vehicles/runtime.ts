@@ -11,9 +11,18 @@
 import { ParamStore } from '../core/params.ts'
 import { clamp, RADS_TO_RPM, smoothstep } from '../core/math/scalar.ts'
 import { computeFrame, newFrame, type BodyFrame } from '../physics/softbody/frame.ts'
-import { centerOfMass, damage, resetBody, translateBody } from '../physics/softbody/softbody.ts'
+import { BeamFlag, centerOfMass, damage, resetBody } from '../physics/softbody/softbody.ts'
 import { FlatGround, type Ground } from '../physics/softbody/ground.ts'
 import { engineRpm, newEngineState, type EngineSpec, type EngineState } from '../physics/vehicle/engine.ts'
+
+/** World placement: position of the design origin + heading (0 = +z). */
+export interface VehiclePose {
+  x: number
+  y: number
+  z: number
+  yaw: number
+}
+export const pose = (x = 0, y = 0, z = 0, yaw = 0): VehiclePose => ({ x, y, z, yaw })
 import { gearLabel, gearRatio, newGearboxState, shift, type GearboxSpec, type GearboxState } from '../physics/vehicle/gearbox.ts'
 import { curve, sample } from '../physics/vehicle/curve.ts'
 import { wheelSteerAngle } from '../physics/vehicle/steering.ts'
@@ -68,6 +77,10 @@ export interface VehicleTelemetry {
   afterfires: number
   afterfireStrength: number
   blowOffs: number
+  /** Engine mechanical health 0..1 (crash damage to the engine bay). */
+  engineHealth: number
+  /** Number of torn-off wheels. */
+  wheelsOff: number
 }
 
 export class Vehicle {
@@ -89,11 +102,16 @@ export class Vehicle {
   automatic: boolean
 
   readonly #shellSpring0: Float64Array
+  /** Design (body-local) node positions, for placing the car anywhere. */
+  readonly #design: Float64Array
+  /** Shell beams of the engine bay (ahead of the front axle). */
+  readonly #bay: Uint32Array
+  #healthTimer = 0
   #autoCooldown = 0
   #reverseHold = 0
   #grind = 0
 
-  constructor(def: VehicleDef, spawn: readonly [number, number, number] = [0, 0, 0], ground: Ground = new FlatGround(0)) {
+  constructor(def: VehicleDef, at: VehiclePose = pose(), ground: Ground = new FlatGround(0)) {
     this.def = def
     this.params = new ParamStore(def.params)
     this.vb = buildVehicleBody(def)
@@ -113,9 +131,12 @@ export class Vehicle {
       { spec: this.engineSpec, state: this.engine, pipeline: this.powerplant },
       { spec: this.gearboxSpec, state: this.gearbox },
     )
-    translateBody(this.vb.body, spawn[0], spawn[1], spawn[2])
-    this.vb.body.pos0.set(this.vb.body.pos)
-    this.prevPos = this.vb.body.pos.slice()
+    this.#design = this.vb.body.pos.slice()
+    this.#bay = engineBayBeams(def, this.vb)
+    this.prevPos = new Float64Array(this.vb.body.pos.length)
+    this.#setPose(at)
+    this.vb.body.pos.set(this.vb.body.pos0)
+    this.prevPos.set(this.vb.body.pos)
     this.automatic = def.drivetrain.automatic
     this.gearbox.gear = this.automatic ? 1 : 0
     this.params.subscribe((id, v) => this.#applyParam(id, v))
@@ -349,6 +370,29 @@ export class Vehicle {
   /** Called once per fixed step AFTER the physics world steps. */
   postStep(): void {
     computeFrame(this.vb.body, this.vb.refs, this.frame)
+    // Engine health from engine-bay crush (cheap, a few times per second).
+    if ((this.#healthTimer = (this.#healthTimer + 1) % 12) === 0) this.engine.health = engineHealthFrom(this.vb.body, this.#bay)
+  }
+
+  /** Design pose → world pose (rotation about +y by yaw, then translation) into pos0. */
+  #setPose(p: VehiclePose): void {
+    const d = this.#design
+    const out = this.vb.body.pos0
+    const c = Math.cos(p.yaw)
+    const s = Math.sin(p.yaw)
+    for (let i = 0; i < d.length; i += 3) {
+      const x = d[i]!
+      const z = d[i + 2]!
+      out[i] = p.x + x * c + z * s
+      out[i + 1] = p.y + d[i + 1]!
+      out[i + 2] = p.z - x * s + z * c
+    }
+  }
+
+  /** Teleport: new spawn pose (becomes the reset point) and a full repair. */
+  placeAt(p: VehiclePose): void {
+    this.#setPose(p)
+    this.reset()
   }
 
   reset(): void {
@@ -360,6 +404,7 @@ export class Vehicle {
     this.#grind = 0
     this.chassis.reset()
     this.powerplant.reset()
+    this.engine.health = 1
     // Re-apply body stiffness (resetBody does not touch spring rates).
     this.#applyParam('body.stiffness', this.params.get('body.stiffness'))
     computeFrame(this.vb.body, this.vb.refs, this.frame)
@@ -388,6 +433,10 @@ export class Vehicle {
     out.afterfires = c.afterfires
     out.afterfireStrength = c.lastAfterfire
     out.blowOffs = c.blowOffs
+    out.engineHealth = this.engine.health
+    let off = 0
+    for (const w of this.chassis.wheels) if (w.detached) off++
+    out.wheelsOff = off
     return out
   }
 
@@ -424,4 +473,33 @@ export const newTelemetry = (): VehicleTelemetry => ({
   afterfires: 0,
   afterfireStrength: 0,
   blowOffs: 0,
+  engineHealth: 1,
+  wheelsOff: 0,
 })
+
+/** Shell beams whose both ends sit ahead of the front axle (engine bay / crumple zone). */
+function engineBayBeams(def: VehicleDef, vb: VehicleBody): Uint32Array {
+  const zFront = Math.max(...def.wheels.filter((w) => w.axle === 'front').map((w) => w.z)) - 0.3
+  const b = vb.body
+  const out: number[] = []
+  for (let i = 0; i < vb.shellBeams; i++) {
+    if (b.pos[b.beamA[i]! * 3 + 2]! > zFront && b.pos[b.beamB[i]! * 3 + 2]! > zFront) out.push(i)
+  }
+  return Uint32Array.from(out)
+}
+
+/**
+ * Engine health from the plastic crush of the engine bay: ~1–2 % average
+ * permanent strain = scratched bumper (healthy); ~7 % and broken beams =
+ * radiator/block destroyed (dead).
+ */
+export function engineHealthFrom(b: VehicleBody['body'], bay: Uint32Array): number {
+  if (bay.length === 0) return 1
+  let crush = 0
+  for (let k = 0; k < bay.length; k++) {
+    const i = bay[k]!
+    crush += b.flags[i]! & BeamFlag.Broken ? 0.25 : Math.abs(b.rest[i]! - b.rest0[i]!) / b.rest0[i]!
+  }
+  crush /= bay.length
+  return 1 - smoothstep(0.012, 0.07, crush)
+}

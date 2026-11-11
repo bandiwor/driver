@@ -18,7 +18,7 @@ export interface RenderInfo {
 export class RenderService {
   readonly renderer: THREE.WebGLRenderer
   readonly scene = new THREE.Scene()
-  readonly camera = new THREE.PerspectiveCamera(60, 1, 0.05, 2000)
+  readonly camera = new THREE.PerspectiveCamera(60, 1, 0.05, 3000)
   readonly env: Environment
   readonly #snapshot: boolean
   readonly #ratioCap: number
@@ -36,7 +36,7 @@ export class RenderService {
     this.renderer.shadowMap.type = THREE.PCFShadowMap
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping
     this.renderer.toneMappingExposure = 1.0
-    this.env = createEnvironment(this.scene, this.renderer.capabilities.getMaxAnisotropy())
+    this.env = createEnvironment(this.scene)
     if (o.snapshot) {
       this.renderer.setPixelRatio(1)
       this.resize(o.snapshot.width, o.snapshot.height)
